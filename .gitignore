@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.vercel/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Stockfish WASM — the sf18 builds are copied from node_modules at build time
+# (prebuild → scripts/copyStockfish.mjs), so they are ignored here, including the
+# ~113 MB stockfish-18-single.wasm that exceeds GitHub's 100 MB per-file limit.
+# The real sf16 / sf17.1 binaries + the sf16 NNUE network are NOT shipped by npm
+# and must be committed (see the REQUIRED_REAL guard in copyStockfish.mjs).
+public/stockfish/stockfish-18-*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cache
+.cache/
+.turbo/
+.eslintcache
+
+# Playwright MCP transient output (snapshots/logs written during live testing)
+.playwright-mcp/
+
+# Playwright E2E artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Coverage
+coverage/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo

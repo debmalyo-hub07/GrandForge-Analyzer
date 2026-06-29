@@ -1,0 +1,64 @@
+/* src/styles/tokens.css */
+:root {
+  --bg-void:     #0a0a0a;
+  --bg-base:     #111114;
+  --bg-surface:  #1c1c20;
+  --bg-elevated: #26262c;
+  --bg-hover:    #303038;
+  --bg-active:   #3a3a44;
+
+  --gold:        #d4a843;
+  --gold-dim:    #96762e;
+  --gold-glow:   rgba(212, 168, 67, 0.2);
+
+  /* Move quality — matches Chess.com + Lichess color system */
+  --brilliant:   #1baca6;
+  --great:       #5c8bb0;
+  --best:        #96bc4b;
+  --excellent:   #96bc4b;
+  --good:        #82ac49;
+  --book:        #c8a84b;
+  --inaccuracy:  #f0c945;
+  --mistake:     #e68f39;
+  --miss:        #e05a5a;
+  --blunder:     #ca3431;
+
+  --eval-white:  #f8f8f8;
+  --eval-black:  #1c1c20;
+
+  --text-primary:   #ede8dc;
+  --text-secondary: #9e9888;
+  --text-muted:     #5e5a52;
+  --text-accent:    #d4a843;
+
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+
+  --font-display: 'Cinzel', Georgia, serif;
+  --font-ui:      'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.theme-light {
+  --bg-void: #e8e4dc;
+  --bg-base: #f0ece4;
+  --bg-surface: #fafaf8;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e8e4dc;
+  --bg-active: #ddd8ce;
+
+  --gold: #b08a2e;
+  --gold-dim: #8a6c20;
+  --gold-glow: rgba(176, 138, 46, 0.18);
+
+  --eval-white: #f8f8f8;
+  --eval-black: #2c2c30;
+
+  --text-primary: #1a1814;
+  --text-secondary: #5a5650;
+  --text-muted: #8a857c;
+  --text-accent: #8a6c20;
+
+  --border: rgba(0, 0, 0, 0.10);
+  --border-strong: rgba(0, 0, 0, 0.20);
+}

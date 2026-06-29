@@ -1,0 +1,728 @@
+/* src/styles/review.css — verbatim per spec §17 review panel CSS */
+
+.review-summary-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accuracy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.accuracy-divider {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.accuracy-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 2px solid;
+  border-radius: 8px;
+  padding: 8px 16px;
+  min-width: 72px;
+}
+
+.accuracy-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.accuracy-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.classification-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.classification-table tr {
+  height: 28px;
+}
+
+.classification-table td {
+  padding: 2px 4px;
+}
+
+.count {
+  font-weight: 600;
+  font-size: 0.9rem;
+  width: 28px;
+  text-align: center;
+}
+
+.white-count { color: #e8d5b0; }
+.black-count { color: #888; }
+
+.classification-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+/* WCAG AA contrast fix: yellow/gold badges need dark text (white ~1.9:1 fails) */
+.icon-badge--inaccuracy,
+.icon-badge--book {
+  color: #1a1814;
+}
+
+.classification-label {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.game-rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.rating-badge {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  padding: 4px 12px;
+}
+
+.rating-badge.white {
+  color: #e8d5b0;
+}
+
+.rating-badge.black {
+  color: #aaa;
+}
+
+.rating-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.phase-row {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.phase-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.phase-icon-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.start-review-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #5aa83c, #3d7a28);
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.start-review-btn:hover {
+  opacity: 0.9;
+}
+
+.start-review-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.review-progress-container {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-progress-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.review-progress-track {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.review-progress-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 3px;
+}
+
+/* -------- Review tab container -------- */
+.review-tab-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* -------- Idle hero card -------- */
+.review-hero-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.review-hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at top,
+    var(--gold-glow) 0%,
+    transparent 60%
+  );
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.review-hero-icon {
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 0 24px var(--gold-glow);
+}
+
+.review-hero-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--text-primary);
+  text-align: center;
+  margin: 0;
+  position: relative;
+}
+
+.review-hero-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
+  line-height: 1.45;
+  position: relative;
+}
+
+.review-hero-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+  font-style: italic;
+  position: relative;
+}
+
+.review-hero-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+  font-family: var(--font-mono);
+  position: relative;
+}
+
+/* -------- Depth selector -------- */
+.review-depth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.review-depth-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.review-depth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.review-depth-chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.review-depth-chip:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.review-depth-chip.is-active {
+  background: var(--bg-base);
+  border-color: var(--gold);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--gold), 0 0 12px var(--gold-glow);
+}
+
+.review-depth-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-depth-chip-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.review-depth-chip-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.review-depth-chip-time {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* -------- Cancel link -------- */
+.review-cancel-row {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.review-link-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.review-link-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+/* -------- Actions row (complete state) -------- */
+.review-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+/* ============================================================
+   ReviewMovePanel — per-move walkthrough
+   ============================================================ */
+.review-move-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.rmp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rmp-ply-counter {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rmp-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.rmp-controls button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rmp-controls button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.rmp-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rmp-controls .rmp-play-btn {
+  background: var(--gold);
+  color: var(--bg-void);
+  border-color: var(--gold);
+}
+.rmp-controls .rmp-play-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  color: var(--bg-void);
+}
+/* A gold :focus-visible outline is invisible on the gold play button. Use a
+   dark inset ring + halo so keyboard focus is clearly visible (WCAG 2.4.7). */
+.rmp-controls .rmp-play-btn:focus-visible {
+  outline: 2px solid var(--bg-void);
+  outline-offset: -4px;
+  box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--bg-void);
+}
+
+.rmp-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 18px 8px;
+}
+
+.rmp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rmp-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rmp-played {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.rmp-played-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.rmp-played-san {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rmp-played-uci {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* Classification badge — animated entry */
+.rmp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  position: relative;
+  isolation: isolate;
+}
+
+.rmp-badge-glyph {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.rmp-badge-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+/* Per-classification glow / animation */
+.rmp-badge--brilliant {
+  box-shadow: 0 0 12px #1baca6, 0 0 28px #1baca680, 0 0 60px #1baca644;
+  animation: rmp-brilliant-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes rmp-brilliant-glow {
+  0%, 100% { box-shadow: 0 0 10px #1baca6, 0 0 22px #1baca680; }
+  50%      { box-shadow: 0 0 18px #1baca6, 0 0 44px #1baca6cc, 0 0 80px #1baca666; }
+}
+
+.rmp-badge--great {
+  box-shadow: 0 0 10px #5c8bb080, 0 0 22px #5c8bb066;
+  animation: rmp-great-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rmp-great-pulse {
+  0%, 100% { transform: translateZ(0) scale(1); }
+  50%      { transform: translateZ(0) scale(1.04); }
+}
+
+.rmp-badge--blunder,
+.rmp-badge--miss {
+  animation: rmp-warning-shake 0.5s ease-in-out 1;
+}
+
+@keyframes rmp-warning-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-4px) rotate(-2deg); }
+  40%      { transform: translateX(4px)  rotate(2deg); }
+  60%      { transform: translateX(-3px) rotate(-1deg); }
+  80%      { transform: translateX(3px)  rotate(1deg); }
+}
+
+.rmp-badge--mistake,
+.rmp-badge--inaccuracy {
+  animation: rmp-caution-pulse 1.8s ease-in-out infinite;
+}
+
+/* WCAG AA contrast fix: white text on #f0c945/inaccuracy (~1.9:1) and
+   #c8a84b/book (~2.4:1) both fail the 4.5:1 normal-text threshold.
+   Switch to the app's darkest text token instead. */
+.rmp-badge--inaccuracy,
+.rmp-badge--book {
+  color: #1a1814;
+}
+
+@keyframes rmp-caution-pulse {
+  0%, 100% { box-shadow: 0 0 8px currentColor; }
+  50%      { box-shadow: 0 0 18px currentColor, 0 0 32px rgba(240,201,69,0.4); }
+}
+
+/* Explanation text */
+.rmp-explanation {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--gold);
+  padding: 8px 10px;
+  border-radius: 4px;
+}
+
+/* Eval-swing visual */
+.rmp-swing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rmp-swing-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.rmp-swing-labels strong {
+  color: var(--text-primary);
+}
+
+.rmp-swing-track {
+  position: relative;
+  height: 10px;
+  background: var(--bg-elevated);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.rmp-swing-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100%;
+  border-radius: 5px;
+}
+
+.rmp-swing-fill--before {
+  background: rgba(150, 188, 75, 0.32);
+}
+
+.rmp-swing-fill--after {
+  z-index: 1;
+  mix-blend-mode: normal;
+}
+
+.rmp-swing-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text-secondary);
+  z-index: 2;
+  transform: translateX(-1px);
+}
+
+/* Best move row */
+.rmp-best {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(150,188,75,0.10), rgba(150,188,75,0.04));
+  border: 1px solid rgba(150,188,75,0.32);
+  border-radius: 6px;
+}
+
+.rmp-best-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #96bc4b;
+  font-weight: 600;
+}
+
+.rmp-best-san {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rmp-best-uci {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+/* Board badge per-classification subtle pulse (separate from rmp-badge) */
+.review-badge--brilliant {
+  animation: rmp-brilliant-glow 2.4s ease-in-out infinite;
+}
+.review-badge--blunder,
+.review-badge--miss {
+  animation: rmp-warning-shake 0.5s ease-in-out 1;
+}
+
+/* ============================================================
+   Accessibility — respect prefers-reduced-motion (WCAG 2.3.3)
+   Kill the infinite glow/pulse loops and one-shot shakes for users
+   who request reduced motion. The classification colour/glyph still
+   conveys the meaning; only the motion is suppressed.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .rmp-badge,
+  .rmp-badge--brilliant,
+  .rmp-badge--great,
+  .rmp-badge--blunder,
+  .rmp-badge--miss,
+  .rmp-badge--mistake,
+  .rmp-badge--inaccuracy,
+  .review-badge--brilliant,
+  .review-badge--blunder,
+  .review-badge--miss {
+    animation: none !important;
+  }
+  .rmp-swing-fill,
+  .rmp-swing-fill--after {
+    transition: none !important;
+  }
+}
+

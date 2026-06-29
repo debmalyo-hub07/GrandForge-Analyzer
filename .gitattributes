@@ -1,0 +1,10 @@
+# Normalize text to LF in the repo (Vercel builds on Linux); check out LF too so
+# Windows CRLF never leaks into committed files or shell scripts.
+* text=auto eol=lf
+
+# Stockfish engine payloads are binary — never line-ending-convert or diff them.
+*.wasm  binary
+*.nnue  binary
+*.svg   text
+*.png   binary
+*.ico   binary
