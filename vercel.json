@@ -5,7 +5,7 @@
   "installCommand": "npm ci",
   "framework": null,
   "functions": {
-    "api/*.ts": { "runtime": "@vercel/node@3", "maxDuration": 30, "memory": 512 }
+    "api/*.ts": { "maxDuration": 30, "memory": 512 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
