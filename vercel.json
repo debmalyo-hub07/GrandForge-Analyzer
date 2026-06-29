@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm ci",
+  "installCommand": "npm ci --include=dev",
   "framework": null,
   "functions": {
     "api/*.ts": { "maxDuration": 30, "memory": 512 }
