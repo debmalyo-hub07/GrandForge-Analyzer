@@ -28,6 +28,12 @@ public/stockfish/stockfish-18-*
 
 # Claude Code local settings
 .claude/settings.local.json
+.claude/skills/
+
+# Tests (kept locally, not in repo)
+tests/
+playwright.config.ts
+src/**/__tests__/
 
 # OS
 .DS_Store

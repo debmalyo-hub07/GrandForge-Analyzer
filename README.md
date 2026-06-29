@@ -115,8 +115,6 @@ Stockfish engine, board, moves, navigation, and review all work without the API.
 | `npm run api:dev` | API only (Express, :3000) |
 | `npm run build` | TypeScript check + Vite production build |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest unit tests |
-| `npm run test:e2e` | Playwright E2E tests (boots Vite, runs in Chromium) |
 
 ---
 
@@ -153,7 +151,6 @@ GrandForge-Analyzer/
     stockfish/                # WASM engine binaries
     pieces/                   # Piece set SVGs
   scripts/                    # Seed scripts, build helpers
-  tests/e2e/                  # Playwright E2E tests
 ```
 
 ---
@@ -251,19 +248,6 @@ Vercel auto-deploys on every push to `main`.
 
 ---
 
-## Testing
-
-```bash
-npm run typecheck     # TypeScript type checking
-npm test              # Vitest -- pure-logic units (accuracy math, UCI parsing, etc.)
-npm run build         # Full production build
-npm run test:e2e      # Playwright -- boots dev server, drives real Stockfish WASM in Chromium
-```
-
-For Playwright, install the browser first: `npx playwright install chromium`
-
----
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -272,7 +256,6 @@ For Playwright, install the browser first: `npx playwright install chromium`
 | Engine | Stockfish 18/17/16 WASM in a Web Worker |
 | Backend | Vercel Serverless, Express 4, Mongoose 8, Zod |
 | Database | MongoDB Atlas (`chess-analyzer`) |
-| Testing | Vitest, Playwright |
 
 ---
 
