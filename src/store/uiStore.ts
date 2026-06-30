@@ -97,7 +97,7 @@ export const useUIStore = create<UIState>()(
 
       boardToolsOpen: false,
       inlineNotation: false,
-      disclosureButtons: false,
+      disclosureButtons: true,
       moveAnnotations: true,
       variationOpacity: 50,
 
