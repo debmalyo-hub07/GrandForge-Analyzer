@@ -19,9 +19,10 @@ export interface IGameReviewMove {
 
 export interface IGamePlayerReview {
   accuracy: number;
-  gameRating: number;
+  gameRating: number | null;
+  gameRatingConfidence?: 'none' | 'provisional' | 'low' | 'medium' | 'high';
   counts: Record<string, number>;
-  phaseReviews: Array<{ label: string; accuracy: number; icon: string }>;
+  phaseReviews: Array<{ label: string; accuracy: number; icon: string; moveCount?: number; avgCpl?: number | null }>;
 }
 
 export interface IGameReviewResult {

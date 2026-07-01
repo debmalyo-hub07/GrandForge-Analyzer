@@ -28,7 +28,8 @@ import {
   computePhaseBoundaries,
   engineScoreToCentipawns,
   isTruePieceSacrifice,
-  moveAccuracy,
+  gameRatingConfidence,
+  phaseSummary,
   playerAccuracy,
   MATE_SCORE_CP,
 } from '../utils/reviewUtils';
@@ -75,6 +76,12 @@ function startingColorFromFen(fen: string): 'w' | 'b' {
 
 function moverFromFen(fen: string): 'w' | 'b' {
   return startingColorFromFen(fen);
+}
+
+function ratingFromMetadata(game: IndexedGame, color: 'w' | 'b'): number | null {
+  const key = color === 'w' ? 'whiteElo' : 'blackElo';
+  const value = game.metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function isCheckmateFen(fen: string): boolean {
@@ -393,6 +400,7 @@ export class GameReviewService {
         // already handles engine-equivalent tolerance (0.5% ΔWin).
         const isBestMove = bestMoveUci === playedUci;
         const deltaWin = Math.max(0, winBefore - winAfter);
+        const playerRating = ratingFromMetadata(game, moverFromFen(fenBefore));
 
         let classification = classifyMove({
           winBefore,
@@ -404,6 +412,7 @@ export class GameReviewService {
           deltaWin,
           mateBefore: normalizedMateBefore,
           mateAfter: normalizedMateAfter,
+          playerRating,
         });
 
         // C6: Tablebase slow-win — when both played and best are 'win' category
@@ -520,25 +529,9 @@ export class GameReviewService {
       const middlegameMoves = scored.filter((m) => m.plyIndex >= openingEndsAtPly && m.plyIndex < middlegameEndsAtPly);
       const endgameMoves = scored.filter((m) => m.plyIndex >= middlegameEndsAtPly);
 
-      const phaseAcc = (phaseMoves: MoveReview[]) => {
-        const rated = phaseMoves.filter((m) => !m.isBookMove);
-        if (rated.length === 0) return null;
-        const sum = rated.reduce((s, m) => s + moveAccuracy(m.evalBefore, m.evalAfter, m.mateBefore, m.mateAfter), 0);
-        return Math.round((sum / rated.length) * 10) / 10;
-      };
-
-      const phaseIcon = (a: number | null): MoveClassification | 'none' => {
-        if (a === null) return 'none';
-        if (a >= 90) return 'best';
-        if (a >= 75) return 'excellent';
-        if (a >= 60) return 'good';
-        if (a >= 45) return 'inaccuracy';
-        return 'mistake';
-      };
-
-      const openingAcc = phaseAcc(openingMoves);
-      const middlegameAcc = phaseAcc(middlegameMoves);
-      const endgameAcc = phaseAcc(endgameMoves);
+      const openingSummary = phaseSummary(openingMoves);
+      const middlegameSummary = phaseSummary(middlegameMoves);
+      const endgameSummary = phaseSummary(endgameMoves);
 
       return {
         color,
@@ -554,10 +547,11 @@ export class GameReviewService {
           missCount,
           avgComplexity,
         ),
+        gameRatingConfidence: gameRatingConfidence(ratedMoves.length),
         phaseReviews: [
-          { label: 'Opening' as const, accuracy: openingAcc ?? 0, icon: phaseIcon(openingAcc) },
-          { label: 'Middlegame' as const, accuracy: middlegameAcc ?? 0, icon: phaseIcon(middlegameAcc) },
-          { label: 'Endgame' as const, accuracy: endgameAcc ?? 0, icon: phaseIcon(endgameAcc) },
+          { label: 'Opening' as const, ...openingSummary },
+          { label: 'Middlegame' as const, ...middlegameSummary },
+          { label: 'Endgame' as const, ...endgameSummary },
         ],
       };
     };

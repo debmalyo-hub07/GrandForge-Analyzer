@@ -41,10 +41,14 @@ export interface MoveReview {
   reason: string;             // human-readable explanation of classification
 }
 
+export type RatingConfidence = 'none' | 'provisional' | 'low' | 'medium' | 'high';
+
 export interface PhaseReview {
   label: 'Opening' | 'Middlegame' | 'Endgame';
   accuracy: number;                     // 0–100
   icon: MoveClassification | 'none';    // representative icon for this phase
+  moveCount: number;                    // non-book, scored moves in this phase
+  avgCpl: number | null;                // average CPL for non-book phase moves
 }
 
 export interface PlayerReview {
@@ -53,6 +57,7 @@ export interface PlayerReview {
   counts: Record<MoveClassification, number>;
   /** Estimated performance rating, or null when too few moves to estimate (<5). */
   gameRating: number | null;
+  gameRatingConfidence: RatingConfidence;
   phaseReviews: PhaseReview[];
 }
 

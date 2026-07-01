@@ -1,4 +1,4 @@
-import type { MoveClassification, MoveReview } from '../types/review';
+import type { MoveClassification, MoveReview, RatingConfidence } from '../types/review';
 
 // ════════════════════════════════════════════════════════════════════════════
 // PHASE 3 — EXPECTED POINTS (WIN PROBABILITY) MODEL
@@ -238,6 +238,37 @@ const GREAT_WIN_AFTER = 0.4;
 
 const BRILLIANT_WIN_BEFORE_MAX = 0.85;
 const BRILLIANT_WIN_AFTER = 0.6;
+const DEFAULT_PLAYER_RATING = 1500;
+
+function ratingBand(playerRating?: number | null): 'beginner' | 'club' | 'advanced' | 'expert' | 'master' {
+  const rating = Math.max(0, Math.min(4000, playerRating ?? DEFAULT_PLAYER_RATING));
+  if (rating < 1000) return 'beginner';
+  if (rating < 1600) return 'club';
+  if (rating < 2200) return 'advanced';
+  if (rating < 2400) return 'expert';
+  return 'master';
+}
+
+function brilliantDropLimit(playerRating?: number | null): number {
+  switch (ratingBand(playerRating)) {
+    case 'beginner': return 0.025;
+    case 'club': return 0.018;
+    case 'advanced': return 0.012;
+    case 'expert': return 0.008;
+    case 'master': return DELTA_WIN_THRESHOLDS.near_best;
+  }
+}
+
+function greatDropLimit(playerRating?: number | null): number {
+  switch (ratingBand(playerRating)) {
+    case 'beginner': return 0.012;
+    case 'club': return 0.008;
+    case 'advanced': return 0.006;
+    case 'expert':
+    case 'master':
+      return DELTA_WIN_THRESHOLDS.near_best;
+  }
+}
 
 export interface ClassifyMoveParams {
   winBefore: number;
@@ -251,6 +282,8 @@ export interface ClassifyMoveParams {
   mateBefore?: number | null;
   /** Mate-in-N after the move (new-mover-positive). null = no forced mate. */
   mateAfter?: number | null;
+  /** Player rating calibrates Brilliant/Great generosity. Unknown defaults to 1500. */
+  playerRating?: number | null;
 }
 
 export function classifyMove(params: ClassifyMoveParams): MoveClassification {
@@ -264,6 +297,7 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
     deltaWin,
     mateBefore = null,
     mateAfter = null,
+    playerRating = DEFAULT_PLAYER_RATING,
   } = params;
 
   if (isBookMove) return 'book';
@@ -272,7 +306,7 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
 
   // C2: Brilliant — strict best OR engine-equivalent (within near_best tolerance).
   // Some genuine brilliancies surface as 2nd-PV at low depth due to tactic horizon.
-  const isBestEquivalent = isBestMove || dw <= DELTA_WIN_THRESHOLDS.near_best;
+  const isBestEquivalent = isBestMove || dw <= brilliantDropLimit(playerRating);
   if (
     isBestEquivalent &&
     isMaterialSacrifice &&
@@ -306,8 +340,12 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
   //   (a) classic chess.com losing→equal+: winBefore<0.2, winAfter>0.4, singular best
   //   (b) equal→winning singular best: winBefore in [0.35,0.7], winAfter>0.7
   //   (c) losing→equal save: winBefore<0.35, winAfter in [0.45,0.7], singular best
-  // All require isBestMove + isSingularChoice and a meaningful swing.
-  if (isBestMove && isSingularChoice) {
+  // All require a singular engine choice, engine-equivalent play, and a
+  // meaningful swing. The rating-calibrated drop limit mirrors Chess.com's
+  // public note that special classifications are more forgiving below master
+  // strength, while remaining deterministic and transparent.
+  const isGreatEquivalent = isBestMove || dw <= greatDropLimit(playerRating);
+  if (isGreatEquivalent && isSingularChoice) {
     const swing = winAfter - winBefore;
     const lostToEqual = winBefore < 0.35 && winAfter >= 0.45 && winAfter < 0.7 && swing > 0.15;
     const equalToWinning = winBefore >= 0.35 && winBefore < 0.7 && winAfter > 0.7 && swing > 0.2;
@@ -353,7 +391,7 @@ export function accuracyToGameRating(
   // Below 5 moves there isn't enough signal to estimate performance — return
   // null so callers can suppress the badge instead of showing a misleading
   // blended-to-1200 number.
-  if (moves < 5) return null;
+  if (moves < 3) return null;
 
   const a = Math.max(0, Math.min(100, accuracy));
   const blunders = blunderCount ?? 0;
@@ -407,6 +445,44 @@ export function accuracyToGameRating(
   const blended = 1200 * (1 - lengthConfidence) + raw * lengthConfidence;
 
   return Math.round(Math.max(200, Math.min(3000, blended)));
+}
+
+export function gameRatingConfidence(moveCount: number): RatingConfidence {
+  if (moveCount < 3) return 'none';
+  if (moveCount < 5) return 'provisional';
+  if (moveCount < 10) return 'low';
+  if (moveCount < 25) return 'medium';
+  return 'high';
+}
+
+export function phaseSummary(phaseMoves: MoveReview[]): {
+  accuracy: number;
+  icon: MoveClassification | 'none';
+  moveCount: number;
+  avgCpl: number | null;
+} {
+  const rated = phaseMoves.filter((m) => !m.isBookMove);
+  if (rated.length === 0) {
+    return { accuracy: 0, icon: 'none', moveCount: 0, avgCpl: null };
+  }
+
+  const sumAccuracy = rated.reduce(
+    (s, m) => s + moveAccuracy(m.evalBefore, m.evalAfter, m.mateBefore, m.mateAfter),
+    0,
+  );
+  const accuracy = Math.round((sumAccuracy / rated.length) * 10) / 10;
+  const avgCpl = Math.round(
+    rated.reduce((sum, m) => sum + Math.min(m.cpl, 1500), 0) / rated.length,
+  );
+
+  let icon: MoveClassification | 'none';
+  if (accuracy >= 90) icon = 'best';
+  else if (accuracy >= 75) icon = 'excellent';
+  else if (accuracy >= 60) icon = 'good';
+  else if (accuracy >= 45) icon = 'inaccuracy';
+  else icon = 'mistake';
+
+  return { accuracy, icon, moveCount: rated.length, avgCpl };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

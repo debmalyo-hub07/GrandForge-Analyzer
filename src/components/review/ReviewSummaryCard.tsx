@@ -1,6 +1,6 @@
 ﻿// src/components/review/ReviewSummaryCard.tsx
 import { motion, MotionConfig } from 'framer-motion';
-import type { GameReviewResult, MoveClassification } from '../../types/review';
+import type { GameReviewResult, MoveClassification, RatingConfidence } from '../../types/review';
 import { readableTextColor } from '../../utils/boardUtils';
 
 const CLASSIFICATION_CONFIG: Record<
@@ -77,6 +77,21 @@ function PhaseIcon({
   );
 }
 
+function confidenceLabel(confidence?: RatingConfidence): string {
+  switch (confidence) {
+    case 'high': return 'High confidence';
+    case 'medium': return 'Medium confidence';
+    case 'low': return 'Low confidence';
+    case 'provisional': return 'Provisional';
+    default: return 'Insufficient data';
+  }
+}
+
+function formatPhaseMeta(moveCount: number, avgCpl: number | null): string {
+  if (moveCount === 0) return 'No rated moves';
+  return `${moveCount} moves / ${avgCpl ?? 0} ACPL`;
+}
+
 export function ReviewSummaryCard({
   result,
   onStartReview,
@@ -137,9 +152,15 @@ export function ReviewSummaryCard({
 
       {/* Game rating row */}
       <div className="game-rating-row">
-        <div className="rating-badge white">{result.white.gameRating ?? '—'}</div>
+        <div className="rating-stack">
+          <div className="rating-badge white">{result.white.gameRating ?? '—'}</div>
+          <div className="rating-confidence">{confidenceLabel(result.white.gameRatingConfidence)}</div>
+        </div>
         <div className="rating-label">Game Rating</div>
-        <div className="rating-badge black">{result.black.gameRating ?? '—'}</div>
+        <div className="rating-stack">
+          <div className="rating-badge black">{result.black.gameRating ?? '—'}</div>
+          <div className="rating-confidence">{confidenceLabel(result.black.gameRatingConfidence)}</div>
+        </div>
       </div>
 
       {/* Phase icons row */}
@@ -153,6 +174,15 @@ export function ReviewSummaryCard({
                 blackIcon={blackPhase?.icon ?? 'none'}
                 label={phase.label}
               />
+              <span className="phase-accuracy">
+                {phase.accuracy.toFixed(1)} / {blackPhase?.accuracy.toFixed(1) ?? '0.0'}
+              </span>
+              <span className="phase-meta white-meta">
+                W {formatPhaseMeta(phase.moveCount ?? 0, phase.avgCpl ?? null)}
+              </span>
+              <span className="phase-meta black-meta">
+                B {formatPhaseMeta(blackPhase?.moveCount ?? 0, blackPhase?.avgCpl ?? null)}
+              </span>
             </div>
           );
         })}

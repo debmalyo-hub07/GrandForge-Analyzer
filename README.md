@@ -10,7 +10,7 @@ Production-grade chess analysis platform powered by Stockfish 18 WASM, MongoDB A
 
 - **Multi-Engine Stockfish** -- switch between SF16, SF17, SF18 (lite, lite multi-threaded) at any time
 - **Live Infinite Analysis** -- engine auto-analyzes every board position with Lichess-style continuous deepening until you stop it, with optional Win/Draw/Loss (WDL) readout on the eval bar
-- **Full Game Review** -- Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Miss / Blunder classification with per-player accuracy scores and Opening / Middlegame / Endgame phase ratings
+- **Full Game Review** -- Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Miss / Blunder classification with per-player accuracy, confidence-labeled game ratings, and Opening / Middlegame / Endgame phase accuracy + ACPL
 - **Chess.com & Lichess Import** -- fetch any user's games by username, no login required
 - **Board Tools** -- Flip Board, Board Editor, Continue from Here, Paste FEN, inline notation & display toggles
 - **7 Board Themes & 6 Piece Sets** -- switch from the board itself
@@ -168,6 +168,8 @@ GrandForge-Analyzer/
 ### Review Pipeline
 
 `GameReviewService.ts` analyzes games ply-by-ply. Per position it resolves evals in priority order: (1) MongoDB position cache, (2) Syzygy tablebase (7 pieces or fewer), (3) Stockfish WASM at the requested depth. Cross-ply reuse halves the work.
+
+Review scoring uses Expected Points / Win% loss rather than raw centipawn loss for move classification. Brilliant and Great move detection is rating-aware when imported Elo metadata is available, while normal Best / Excellent / Good / Inaccuracy / Mistake / Blunder thresholds stay stable. Game Rating is a single-game performance estimate with confidence labels: provisional, low, medium, or high depending on rated move count.
 
 ### API
 

@@ -139,6 +139,8 @@ const phaseReviewSchema = z.object({
   label: z.enum(['Opening', 'Middlegame', 'Endgame']),
   accuracy: z.number().min(0).max(100),
   icon: z.union([moveClassificationSchema, z.literal('none')]),
+  moveCount: z.number().int().min(0).optional().default(0),
+  avgCpl: z.number().int().min(0).nullable().optional().default(null),
 });
 
 const playerReviewSchema = z.object({
@@ -146,6 +148,7 @@ const playerReviewSchema = z.object({
   accuracy: z.number().min(0).max(100),
   counts: z.record(moveClassificationSchema, z.number().int().min(0)),
   gameRating: z.number().int().min(0).max(4000).nullable(),
+  gameRatingConfidence: z.enum(['none', 'provisional', 'low', 'medium', 'high']).optional().default('none'),
   phaseReviews: z.array(phaseReviewSchema).length(3),
 });
 

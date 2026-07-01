@@ -14,7 +14,7 @@ npm run build        # tsc (typecheck, noEmit) then vite build → dist/
 npm run typecheck    # tsc --noEmit
 npm test             # vitest run (node env, src/**/*.test.ts)
 npm run test:watch   # vitest watch
-npx vitest run src/utils/__tests__/reviewUtils.test.ts   # single test file
+npx vitest run src/utils/reviewUtils.test.ts   # single test file
 vercel dev           # full prod-like local stack (serverless API + web), see README
 ```
 
@@ -77,7 +77,9 @@ Stores reference each other directly (e.g. `engineStore` reads `reviewStore.prog
 - **Move accuracy**: `103.1668*exp(-0.04354*ΔWin%) - 3.1669 + 1`, clamped [0,100] (Lichess `AccuracyPercent.scala`).
 - **Game accuracy**: blend of weighted mean (weight = clamped stdev of Win% over a sliding window) and harmonic mean.
 - **Classification ladder** (`classifyMove`, ΔWin in 0..1): Best ≤0.005 · Excellent ≤0.02 · Good ≤0.05 · Inaccuracy ≤0.10 · Mistake ≤0.20 · Blunder >0.20, with Brilliant/Great/Miss overrides. Comments document the spec — keep them in sync with the constants.
-- **Performance rating** (`accuracyToGameRating`): CAPS-style cubic on accuracy minus per-30-move incident penalties, plus a complexity bonus. Returns `null` below 5 moves. The complexity bonus is built so `avgComplexity = 0` ⇒ bonus = 0 (byte-identical to the pre-complexity behavior); complexity = per-ply top-2 MultiPV Win% spread, averaged over rated moves.
+- **Brilliant / Great calibration**: `classifyMove` accepts optional player Elo metadata and uses deterministic rating bands to make special classifications slightly more forgiving below master strength while preserving the normal Expected Points ladder. Unknown Elo defaults to 1500.
+- **Performance rating** (`accuracyToGameRating`): CAPS-style cubic on accuracy minus per-30-move incident penalties, plus a complexity bonus. Returns `null` below 3 non-book rated moves; 3-4 moves are shown as `provisional`, 5-9 as `low`, 10-24 as `medium`, and 25+ as `high` confidence via `gameRatingConfidence`. The complexity bonus is built so `avgComplexity = 0` ⇒ bonus = 0 (byte-identical to the pre-complexity behavior); complexity = per-ply top-2 MultiPV Win% spread, averaged over rated moves.
+- **Phase summaries** (`phaseSummary`): Opening / Middlegame / Endgame rows carry per-side accuracy, rated move count, average CPL, and a representative icon. Book and unscored moves are excluded from phase scoring.
 - **Phase boundaries** (`computePhaseBoundaries`): Lichess `Divider.scala` port (majors/minors, backrank sparseness, mixedness).
 
 ### API (`api/`)
@@ -94,6 +96,6 @@ Single-page app (`src/App.tsx`): two routes (`/` and `/game/:id`) both render `A
 
 ## Testing
 
-Vitest runs in the **node** environment (`vite.config.ts` test config) — only pure-logic units (`src/**/*.{test,spec}.ts`). WASM/worker glue and browser-dependent code are excluded (`*.browser.test.ts`) and are not covered by `npm test`. When adding logic to `reviewUtils.ts` / `EngineManager.ts` pure functions, add a matching test under the adjacent `__tests__/` directory.
+Vitest runs in the **node** environment (`vite.config.ts` test config) — only pure-logic units (`src/**/*.{test,spec}.ts`). WASM/worker glue and browser-dependent code are excluded (`*.browser.test.ts`) and are not covered by `npm test`. When adding logic to `reviewUtils.ts` / `EngineManager.ts` pure functions, add or update adjacent `*.test.ts` files such as `src/utils/reviewUtils.test.ts`. Do not put new tests under `src/**/__tests__/`; that path is ignored by git in this repo.
 
 **Playwright E2E** (`tests/e2e/`, config `playwright.config.ts`, run `npm run test:e2e`) covers what unit tests can't: the real Stockfish WASM engine and the review pipeline in a Chromium browser. The config's `webServer` boots the Vite **dev** server itself (no API/MongoDB needed — the engine and review run in-browser; the review's `/api` cache fetch fails over to WASM). Specs: `smoke` (load + `crossOriginIsolated` + board), `analysis` (move → eval → depth → MultiPV line count → fixed-depth terminates), `infinite` (depth blows past the fixed cap and keeps running, then Stop/Resume), `review` (short game → per-player accuracy). Tests drive deterministic moves via zustand stores exposed on `window` by `src/devHooks.ts`, which `main.tsx` imports **only** under `import.meta.env.MODE === 'development'` (see the `NODE_ENV` note in Environment notes for why not `DEV`). `tests/**` is outside the `tsc` include, so Playwright type-checks its own specs.
