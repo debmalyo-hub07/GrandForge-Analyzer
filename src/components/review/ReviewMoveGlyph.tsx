@@ -1,6 +1,31 @@
 // src/components/review/ReviewMoveGlyph.tsx
-import type { MoveClassification } from '../../types/review';
+import type { GameReviewResult, MoveClassification, MoveReview } from '../../types/review';
 import { useReviewStore } from '../../store/reviewStore';
+
+/**
+ * Resolve the review for a specific move-tree node, honoring which LINE the
+ * review was computed on. A move at `plyIndex` only carries a review if `nodeId`
+ * is the node that actually sits at that ply on the reviewed line
+ * (`reviewedNodeIds[plyIndex + 1]`, root being index 0). This stops a review of
+ * one line from decorating a same-ply node on a different branch.
+ *
+ * Legacy results without `reviewedNodeIds` can't distinguish branches, so they
+ * fall back to decorating mainline nodes only (`isOnMainline`).
+ */
+export function getReviewForNode(
+  result: GameReviewResult,
+  nodeId: string,
+  plyIndex: number,
+  isOnMainline: boolean,
+): MoveReview | null {
+  const review = result.moveReviews.find((m) => m.plyIndex === plyIndex) ?? null;
+  if (!review) return null;
+  const ids = result.reviewedNodeIds;
+  if (ids && ids.length > 0) {
+    return ids[plyIndex + 1] === nodeId ? review : null;
+  }
+  return isOnMainline ? review : null;
+}
 
 const GLYPH: Record<MoveClassification, string> = {
   brilliant: '!!',
@@ -28,12 +53,20 @@ const GLYPH_COLOR: Record<MoveClassification, string> = {
   blunder: '#ca3431',
 };
 
-export function MoveNodeGlyph({ plyIndex }: { plyIndex: number }) {
+export function MoveNodeGlyph({
+  plyIndex,
+  nodeId,
+  isMainline,
+}: {
+  plyIndex: number;
+  nodeId: string;
+  isMainline: boolean;
+}) {
   const result = useReviewStore((s) => s.result);
   const isReviewMode = useReviewStore((s) => s.isReviewMode);
   if (!isReviewMode || !result) return null;
 
-  const review = result.moveReviews[plyIndex];
+  const review = getReviewForNode(result, nodeId, plyIndex, isMainline);
   if (!review) return null;
   if (review.classification === 'book') return null;
 

@@ -32,7 +32,7 @@ export const MoveNode = React.memo(function MoveNode({
       } ${isMainline ? '' : 'italic'}`}
     >
       <span className="move-san font-mono">{san}</span>
-      <MoveNodeGlyph plyIndex={plyIndex} />
+      <MoveNodeGlyph plyIndex={plyIndex} nodeId={nodeId} isMainline={isMainline} />
     </button>
   );
 });

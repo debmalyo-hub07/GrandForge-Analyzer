@@ -1,0 +1,107 @@
+/* src/styles/board.css
+ *
+ * Board polish: engine-arrow overlay, click-to-move selection, legal-move dots
+ * and capture rings, plus piece hover motion. Scoped under `.gf-board` (the
+ * relative wrapper ChessBoardWrapper renders around <Chessboard/>).
+ *
+ * Design intent: classic chess.com / lichess feel — STATIC markers (no infinite
+ * pulsing/glowing), vibrant green, arrows that appear instantly and hold still.
+ * The selection ring + legal markers are real DOM elements in an absolutely
+ * positioned layer (`.gf-marker-layer`) because react-chessboard's inline
+ * `customSquareStyles` can't carry gradients or :hover.
+ */
+
+/* ---------- board frame ---------- */
+.gf-board {
+  position: relative;
+}
+
+/* ---------- engine / review arrows (custom single-shape overlay) ---------- */
+/* react-chessboard's own arrow is a thin <line> + a small detached <polygon>
+ * head — it reads as a broken "3-fold" arrow and can't be reshaped via CSS. We
+ * suppress it and draw each arrow in BoardArrowOverlay as ONE filled polygon
+ * (thick shaft flowing into a proportional head), chess.com / lichess style.
+ *
+ * NO entrance animation: the engine's MultiPV set churns every depth tick, so
+ * an appear-animation would replay on each re-sort and make arrows visibly
+ * jitter. Arrows just render — rock steady, like the real sites. */
+.gf-arrow-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4; /* above pieces, like chess.com / lichess */
+  overflow: visible;
+}
+.gf-arrow-shape {
+  filter: drop-shadow(0 1.5px 2px rgba(0, 0, 0, 0.55));
+}
+
+/* ---------- piece motion ---------- */
+/* Custom pieces render as <img>. Subtle lift on hover, grab cursors. */
+.gf-board [data-square] img {
+  transition: transform 0.12s cubic-bezier(0.22, 0.8, 0.3, 1);
+  cursor: grab;
+}
+.gf-board [data-square] img:hover {
+  transform: scale(1.04);
+}
+.gf-board [data-square] img:active {
+  cursor: grabbing;
+}
+
+/* ---------- marker overlay ---------- */
+.gf-marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.gf-marker {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  box-sizing: border-box;
+}
+
+/* selected piece — solid classic highlight tint + thin inset frame. Static. */
+.gf-sel {
+  background: rgba(255, 206, 84, 0.42);
+  box-shadow: inset 0 0 0 clamp(2px, 0.5vmin, 4px) rgba(255, 206, 84, 0.55);
+}
+
+/* legal move to empty square — single solid translucent dot. No glow, no pulse.
+ * chess.com/lichess style: a calm dot that reads instantly. */
+.gf-dot {
+  display: grid;
+  place-items: center;
+}
+.gf-dot::after {
+  content: '';
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: rgba(38, 166, 91, 0.9);
+}
+
+/* legal move that captures — thick corner-hugging ring, piece shows through.
+ * Static; the transparent center lets the target piece read clearly. */
+.gf-cap {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 0 62%,
+    rgba(38, 166, 91, 0.9) 64%,
+    rgba(38, 166, 91, 0.9) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gf-board [data-square] img {
+    transition: none !important;
+  }
+}

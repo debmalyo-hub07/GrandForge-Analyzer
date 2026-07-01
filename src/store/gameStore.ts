@@ -542,6 +542,11 @@ function buildIndexedGameFromTree(
   const moveSanList: string[] = [];
   const moveUciList: string[] = [];
   const fenPositions: string[] = [root.fen];
+  // Record the exact node line this indexed game is built from (root first) so
+  // the review can pin itself to it and playback follows the reviewed line
+  // rather than re-deriving the mainline. Truncated in lock-step with the move
+  // arrays if a node is unexpectedly missing.
+  const reviewedNodeIds: string[] = [root.id];
 
   for (let i = 1; i < path.length; i++) {
     const node = tree.nodes[path[i]];
@@ -549,6 +554,7 @@ function buildIndexedGameFromTree(
     moveSanList.push(node.san);
     moveUciList.push(node.uci);
     fenPositions.push(node.fen);
+    reviewedNodeIds.push(node.id);
   }
 
   const pgn = moveSanList
@@ -568,8 +574,40 @@ function buildIndexedGameFromTree(
     moveSanList,
     plyCount: moveSanList.length,
     engineReady: true,
+    reviewedNodeIds,
     metadata: {},
   };
 }
 
-export { getMainlinePath, getPathToNode, buildIndexedGameFromTree };
+/** Stable identity key for a node path (root→…→leaf), used to compare a review's
+ *  reviewed line against a candidate line without deep-equality on the ids. */
+function pathKey(nodeIds: string[]): string {
+  return nodeIds.join('/');
+}
+
+/**
+ * Resolve the MoveNode id at a given ply along a specific line.
+ *
+ * When `reviewedNodeIds` is supplied (the line a review was computed on), ply N
+ * maps directly to `reviewedNodeIds[N]` — so playback follows the REVIEWED line
+ * (mainline or variation) exactly. Without it, fall back to the legacy behavior
+ * of walking children[0] from the root (the mainline), preserving playback for
+ * older results that carry no line identity.
+ */
+function getNodeIdAtPly(tree: MoveTree, ply: number, reviewedNodeIds?: string[]): string | null {
+  if (reviewedNodeIds && reviewedNodeIds.length > 0) {
+    if (ply < 0 || ply >= reviewedNodeIds.length) return null;
+    return reviewedNodeIds[ply];
+  }
+  let node = tree.nodes[tree.rootId];
+  let i = 0;
+  while (node && i < ply) {
+    if (node.children.length === 0) break;
+    const nextId: string = node.children[0];
+    node = tree.nodes[nextId];
+    i++;
+  }
+  return node ? node.id : null;
+}
+
+export { getMainlinePath, getPathToNode, buildIndexedGameFromTree, getNodeIdAtPly, pathKey };

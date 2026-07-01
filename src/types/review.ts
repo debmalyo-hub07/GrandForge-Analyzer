@@ -70,6 +70,17 @@ export interface GameReviewResult {
   reviewedAt: string;          // ISO timestamp
   openingName: string | null;
   ecoCode: string | null;
+  /**
+   * Line identity — the exact move-tree line this review was computed on, so
+   * playback / glyphs / arrows follow the REVIEWED path instead of blindly
+   * walking the mainline (children[0]). `reviewedNodeIds[k]` is the MoveNode id
+   * reached after k plies (index 0 = root), so a move at plyIndex j lives at
+   * `reviewedNodeIds[j + 1]`. Absent on legacy results — consumers then fall
+   * back to decorating mainline nodes only. See getReviewForNode / getNodeIdAtPly.
+   */
+  reviewedNodeIds?: string[];
+  reviewedPathKey?: string;    // reviewedNodeIds.join('/') — cheap path equality
+  reviewedLineUciKey?: string; // moveUciList.join(' ') — cheap line equality
 }
 
 export interface ReviewProgress {

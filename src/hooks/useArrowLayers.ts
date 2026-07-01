@@ -16,7 +16,12 @@ import { cpAndMateToWin } from '../utils/reviewUtils';
 export type BoardArrow = [Square, Square, string?];
 
 export const ENGINE_ARROW_BASE_COLOR = '#16a34a';
-const ENGINE_ARROW_COLOR = `${ENGINE_ARROW_BASE_COLOR}ff`;
+// Rank hierarchy: the best move is a vibrant emerald at full strength; each
+// weaker MultiPV alternative uses a deeper green and fades in alpha, so the
+// recommendation reads at a glance instead of a wall of identical arrows.
+// Vibrant-classic palette (chess.com / lichess register), not muddy.
+const ENGINE_ARROW_BEST_COLOR = '#2fc85a';
+const ENGINE_ARROW_ALT_COLOR = '#1f9d4d';
 const MAX_ENGINE_ARROW_LINES = 5;
 export const ENGINE_ARROW_MAX_DELTA_WIN = 0.05;
 
@@ -50,12 +55,14 @@ export function reviewPlayedArrowColor(classification: MoveClassification): stri
   }
 }
 
-function applyOpacity(hex: string, opacity: number): string {
-  if (hex.length < 9) return hex;
-  const rgbPart = hex.slice(0, 7);
-  const alphaHex = hex.slice(7, 9);
-  const alpha = Math.round(parseInt(alphaHex, 16) * Math.max(0, Math.min(1, opacity)));
-  return `${rgbPart}${alpha.toString(16).padStart(2, '0')}`;
+/** Engine arrow color for a given display rank (0 = best move). Alpha folds in
+ *  the user's variation-opacity so the settings slider still applies. */
+function engineArrowColor(rank: number, opacity: number): string {
+  const base = rank === 0 ? ENGINE_ARROW_BEST_COLOR : ENGINE_ARROW_ALT_COLOR;
+  const alpha = rank === 0 ? 1 : Math.max(0.4, 0.82 - (rank - 1) * 0.13);
+  const clamped = Math.max(0, Math.min(1, opacity));
+  const byte = Math.round(255 * alpha * clamped);
+  return `${base}${byte.toString(16).padStart(2, '0')}`;
 }
 
 function uciToArrow(uci: string, color: string): BoardArrow | null {
@@ -178,12 +185,12 @@ export function useEngineArrows(): BoardArrow[] {
           const key = first.slice(0, 4);
           if (seen.has(key)) continue;
           seen.add(key);
-          const a = uciToArrow(first, applyOpacity(ENGINE_ARROW_COLOR, opacity));
+          const a = uciToArrow(first, engineArrowColor(out.length, opacity));
           if (a) out.push(a);
         }
       }
     } else if (bestMoveUci && bestMoveUci.length >= 4) {
-      const a = uciToArrow(bestMoveUci, applyOpacity(ENGINE_ARROW_COLOR, opacity));
+      const a = uciToArrow(bestMoveUci, engineArrowColor(0, opacity));
       if (a) out.push(a);
     }
     return out;

@@ -85,7 +85,7 @@ export function ReviewTab() {
   };
 
   const handleRun = async (depth: number) => {
-    const game = buildIndexedGameFromTree(moveTree);
+    const game = buildIndexedGameFromTree(moveTree, getMainlinePath(moveTree).at(-1));
     if (!game) {
       toast.error('Play at least one move first');
       return;
@@ -173,7 +173,7 @@ export function ReviewTab() {
 
   const handleExportPgn = () => {
     if (!result) return;
-    const game = buildIndexedGameFromTree(moveTree);
+    const game = buildIndexedGameFromTree(moveTree, getMainlinePath(moveTree).at(-1));
     if (!game) {
       toast.error('No game to export');
       return;
@@ -312,7 +312,7 @@ export function ReviewTab() {
   }
 
   // ── State: idle ───────────────────────────────────────────────────────────
-  const derivedGame = buildIndexedGameFromTree(moveTree);
+  const derivedGame = buildIndexedGameFromTree(moveTree, getMainlinePath(moveTree).at(-1));
   const gameLoaded = derivedGame !== null && derivedGame.plyCount > 0;
   const mainlinePath = getMainlinePath(moveTree);
   const moveCount = Math.max(0, mainlinePath.length - 1);

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-GrandForge is a browser-based chess analysis platform: React 18 + Vite 5 + TypeScript frontend, Stockfish (16/17/18) WASM running in a Web Worker, and a Vercel-serverless / Express API backed by MongoDB Atlas. There is no git repository here.
+GrandForge is a browser-based chess analysis platform: React 18 + Vite 5 + TypeScript frontend, Stockfish (16/17/18) WASM running in a Web Worker, and a Vercel-serverless / Express API backed by MongoDB Atlas.
 
 ## Commands
 
@@ -63,7 +63,7 @@ Two strength/telemetry options ride on `EngineOptions`, both off by default (def
 ### State (zustand stores in `src/store/`)
 
 - `engineStore.ts` — owns the `EngineManager` instance, subscribes to its event stream, and translates raw UCI `info` lines into displayable `EngineLine[]`. Two subtleties: (1) **eval-bar stability gate** `MIN_RENDER_DEPTH = 4` — the lines panel updates every depth, but the headline eval/bar only refresh once the search clears the gate for the current FEN, so it never flashes a depth-1 spike or collapses to center on a move; (2) on position change it does **not** blank `evalFormatted`/`rawCp`/`currentDepth` — it holds the previous valid values until the new search clears the gate. Persisted (localStorage `grandforge-engine`): only `engineVersion`, `depth`, `multiPV`, `engineSettings`, `moveTimeMs`, `infiniteMode` — never the runtime manager/lines/eval. UCI→SAN conversion is memoized via a bounded (2000-entry) LRU `sanCache`. **`initEngine` uses a module-level generation counter** (`engineInitGeneration`): a concurrent re-init (React StrictMode's dev double-mount, Vite HMR, rapid engine switches) could otherwise let the *older* `loadEngine()` resolve last and publish — then terminate — its own worker, leaving a dead manager in the store (no analysis until the next move). Only the latest generation may write `manager`; superseded calls terminate their orphan and return. Don't remove it.
-- `gameStore.ts` — the move tree (`MoveTree`/`MoveNode`, a node map with a `root`), navigation, PGN/FEN/indexed-game loading. Any game (imported or hand-played) becomes reviewable via `buildIndexedGameFromTree`. Loading a new game calls `resetTransientStateForNewGame` (clears engine state, arrows, highlights, review); navigation calls `clearManualAnnotations` (manual arrows/highlights annotate one position only — review arrows live in their own layer and survive).
+- `gameStore.ts` — the move tree (`MoveTree`/`MoveNode`, a node map with a `root`), navigation, PGN/FEN/indexed-game loading. Any game (imported or hand-played) becomes reviewable via `buildIndexedGameFromTree(tree, leafNodeId?)` — when a leaf node id is passed it walks the path from root to that leaf (enabling variation review); without it, defaults to the mainline. Exported helpers: `getMainlinePath`, `getPathToNode`, `getNodeIdAtPly(tree, ply, reviewedNodeIds?)` (resolves the move-tree node at a ply along a specific reviewed line or falls back to mainline), `pathKey(nodeIds)` (stable `/`-joined identity string for comparing reviewed lines). Loading a new game calls `resetTransientStateForNewGame` (clears engine state, arrows, highlights, review); navigation calls `clearManualAnnotations` (manual arrows/highlights annotate one position only — review arrows live in their own layer and survive).
 - `reviewStore.ts`, `uiStore.ts`, `importStore.ts` — review results/progress, UI prefs + manual arrows/highlights, and game-import flow.
 
 Stores reference each other directly (e.g. `engineStore` reads `reviewStore.progress.phase`). The recurring guard `if (reviewStore.progress.phase === 'analyzing') return;` blocks live analysis **only while a batch review is crunching the worker** — browsing finished review results still gets live analysis. Gating on the whole review session (not just `'analyzing'`) is a known regression that freezes the eval bar.
@@ -82,6 +82,8 @@ Stores reference each other directly (e.g. `engineStore` reads `reviewStore.prog
 - **Phase summaries** (`phaseSummary`): Opening / Middlegame / Endgame rows carry per-side accuracy, rated move count, average CPL, and a representative icon. Book and unscored moves are excluded from phase scoring.
 - **Phase boundaries** (`computePhaseBoundaries`): Lichess `Divider.scala` port (majors/minors, backrank sparseness, mixedness).
 
+**Review line identity**: reviews pin to the exact move-tree line they were computed on via `reviewedNodeIds` (an array of MoveNode ids, root at index 0). This fixes the variation desync bug where reviewing a non-mainline variation would play back along the mainline. Three keying fields on `GameReviewResult`: `reviewedNodeIds` (the node path), `reviewedPathKey` (ids joined by `/` for cheap equality), `reviewedLineUciKey` (UCI moves joined by space). `getReviewForNode(result, nodeId, ply, isMainline)` in `ReviewMoveGlyph.tsx` scopes glyph decoration to only the reviewed line; legacy results without `reviewedNodeIds` fall back to mainline-only decoration. `getNodeIdAtPly` in `gameStore.ts` resolves playback navigation along the reviewed path.
+
 ### API (`api/`)
 
 Route modules live under `api/_lib/routes/**`, each exporting a default Express app built by `createApp()` (CORS + 5 MB JSON + rate limit 150/15min). They are **all mounted behind one regex dispatch table in `api/_lib/router.ts`**, which is re-exported as the *single* Vercel Serverless Function `api/[...path].ts`. This is deliberate: Vercel Hobby allows at most **12 functions per deployment** and there are ~25 routes, so one-file-per-function would fail to deploy. `api/_lib/**` is underscore-prefixed, so Vercel never turns those modules (routes, models, helpers) into their own functions — only `api/[...path].ts` is a function. `scripts/apiDev.ts` imports the **same** `router.ts` and only adds `.listen()`, so dev and prod run one identical routing table — **to add a route, drop it under `api/_lib/routes/**` and register one line in `api/_lib/router.ts`** (the route URLs are unchanged; each inner app still registers its full `/api/...` path).
@@ -93,6 +95,12 @@ Route modules live under `api/_lib/routes/**`, each exporting a default Express 
 ### Frontend
 
 Single-page app (`src/App.tsx`): two routes (`/` and `/game/:id`) both render `AnalyzerPage`; everything else is `NotFoundPage`. The board is `react-chessboard`, move legality/SAN/FEN via `chess.js`. `useAutoAnalysis` debounces (150 ms) live analysis on every FEN change and stops on terminal positions. Components are grouped by domain under `src/components/` (board, engine, evaluation, review, import, navigation, layout, ui). Path alias `@/*` → `src/*`.
+
+**Board overlays**: `ChessBoardWrapper` wraps `<Chessboard/>` in a `.gf-board` relative container and renders two overlay layers on top of it:
+
+- `BoardMarkerOverlay` — DOM-based markers for click-to-move: selection highlight (`.gf-sel`), legal-move dots (`.gf-dot`), and capture rings (`.gf-cap`). These replace the old inline `customSquareStyles` approach so they can carry gradients and CSS animation. `captureTargets` (a `Set<Square>`) tracks which legal moves are captures/en-passant. Styles in `src/styles/board.css`.
+- `BoardArrowOverlay` — custom SVG arrows (single filled polygon per arrow, chess.com/lichess style). react-chessboard's built-in arrows (`customArrows=[]`, `areArrowsAllowed=false`) are suppressed because its thin-line + detached-head rendering can't be reshaped. Arrow geometry (shaft width, head proportions, gaps) is tuned in percentage-space constants. A stable `NO_ARROWS` empty-array ref avoids re-running the library's arrow memo.
+- Engine arrow colors use a rank hierarchy: best move = vibrant emerald `#2fc85a`, alternatives = deeper green `#1f9d4d` with progressively lower alpha per rank. `engineArrowColor(rank, opacity)` in `useArrowLayers.ts` computes per-arrow color.
 
 ## Testing
 

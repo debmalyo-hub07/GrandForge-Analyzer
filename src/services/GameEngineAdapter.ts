@@ -11,6 +11,12 @@ export interface IndexedGame {
   plyCount: number;
   engineReady: boolean;
   reviewResult?: GameReviewResult;
+  /**
+   * MoveNode ids of the exact line this indexed game was built from, root first
+   * (length === plyCount + 1). Lets a review pin itself to the line it analyzed.
+   * Empty for games not sourced from the local move tree (e.g. server fetch).
+   */
+  reviewedNodeIds: string[];
   metadata: Record<string, unknown>;
 }
 

@@ -8,6 +8,7 @@ import App from './App';
 
 import './styles/global.css';
 import './styles/board-themes.css';
+import './styles/board.css';
 import './styles/review.css';
 
 const queryClient = new QueryClient({

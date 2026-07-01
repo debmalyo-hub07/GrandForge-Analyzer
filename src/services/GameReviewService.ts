@@ -565,6 +565,11 @@ export class GameReviewService {
       reviewedAt: new Date().toISOString(),
       openingName: (game.metadata?.opening as string) ?? null,
       ecoCode: (game.metadata?.ecoCode as string) ?? null,
+      // Pin the result to the exact line it was computed on, so playback /
+      // glyphs / arrows follow the reviewed line instead of the mainline.
+      reviewedNodeIds: game.reviewedNodeIds,
+      reviewedPathKey: game.reviewedNodeIds.join('/'),
+      reviewedLineUciKey: moveUciList.join(' '),
     };
 
     this.isRunning = false;

@@ -8,6 +8,13 @@ import { BOARD_THEMES, PIECE_SETS } from '../../types/themes';
 import { buildSquareStyles, buildCustomPieces, REVIEW_COLORS, REVIEW_GLYPHS, readableTextColor } from '../../utils/boardUtils';
 import { computeMotifs } from '../../utils/motifs';
 import { useEngineArrows, useReviewArrows, useManualArrows } from '../../hooks/useArrowLayers';
+import { BoardMarkerOverlay } from './BoardMarkerOverlay';
+import { BoardArrowOverlay } from './BoardArrowOverlay';
+
+// react-chessboard's built-in arrows (thin line + detached head) are suppressed
+// in favor of BoardArrowOverlay's single-shape arrows. Stable empty ref avoids
+// re-running the library's arrow memo each render.
+const NO_ARROWS: [import('chess.js').Square, import('chess.js').Square, string?][] = [];
 
 export interface ChessBoardWrapperProps {
   boardSize: number;
@@ -54,6 +61,7 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
 
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Square[]>([]);
+  const [captureTargets, setCaptureTargets] = useState<Set<Square>>(new Set());
 
   // boardPosition is what react-chessboard actually renders.
   // During review navigation we apply the UCI move against the previous FEN so
@@ -89,6 +97,7 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
   useEffect(() => {
     setSelectedSquare(null);
     setLegalTargets([]);
+    setCaptureTargets(new Set());
   }, [currentFen]);
 
   const handleSquareClick = (sq: Square) => {
@@ -111,15 +120,24 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
       });
       setSelectedSquare(null);
       setLegalTargets([]);
+      setCaptureTargets(new Set());
       return;
     }
     if (piece && piece.color === chessAtFen.turn()) {
       setSelectedSquare(sq);
       const moves = chessAtFen.moves({ square: sq, verbose: true });
       setLegalTargets(moves.map((m) => m.to as Square));
+      setCaptureTargets(
+        new Set(
+          moves
+            .filter((m) => m.flags.includes('c') || m.flags.includes('e'))
+            .map((m) => m.to as Square),
+        ),
+      );
     } else {
       setSelectedSquare(null);
       setLegalTargets([]);
+      setCaptureTargets(new Set());
     }
   };
 
@@ -232,25 +250,9 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
       }
     }
 
-    if (selectedSquare) {
-      const prevSelBg = base[selectedSquare]?.background;
-      base[selectedSquare] = {
-        ...base[selectedSquare],
-        background: prevSelBg
-          ? `${prevSelBg}, radial-gradient(circle, rgba(255,215,0,0.45) 36%, transparent 36%)`
-          : 'radial-gradient(circle, rgba(255,215,0,0.45) 36%, transparent 36%)',
-      };
-      for (const t of legalTargets) {
-        const target = chessAtFen ? chessAtFen.get(t) : null;
-        const prevTgtBg = base[t]?.background;
-        base[t] = {
-          ...base[t],
-          background: prevTgtBg ?? (target
-            ? 'radial-gradient(circle, transparent 56%, rgba(20,180,80,0.55) 56%, rgba(20,180,80,0.55) 70%, transparent 70%)'
-            : 'radial-gradient(circle, rgba(20,180,80,0.55) 22%, transparent 22%)'),
-        };
-      }
-    }
+    // Selection ring + legal-move dots/capture rings are drawn by
+    // BoardMarkerOverlay (premium DOM markers with gradient/glow/animation),
+    // not as flat inline square backgrounds.
 
     if (chessAtFen && chessAtFen.inCheck()) {
       const turn = chessAtFen.turn();
@@ -286,8 +288,6 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
     pinnedPieces,
     checkableKing,
     motifs,
-    selectedSquare,
-    legalTargets,
     chessAtFen,
   ]);
 
@@ -297,7 +297,11 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
   );
 
   return (
-    <Chessboard
+    <div
+      className="gf-board"
+      style={{ position: 'relative', width: boardSize, height: boardSize }}
+    >
+      <Chessboard
       id="grandforge-board"
       position={boardPosition}
       onPieceDrop={(src, tgt) => {
@@ -319,10 +323,12 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
       customLightSquareStyle={{ backgroundColor: theme.lightSquare }}
       customBoardStyle={{
         borderRadius: '4px',
-        boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        boxShadow:
+          '0 10px 44px rgba(0,0,0,0.58), 0 2px 10px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.05)',
       }}
       customSquareStyles={squareStyles}
-      customArrows={mergedArrows}
+      customArrows={NO_ARROWS}
+      areArrowsAllowed={false}
       customPieces={customPieces}
       onSquareClick={(sq) => handleSquareClick(sq as Square)}
       onSquareRightClick={(sq) =>
@@ -331,7 +337,15 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
       showBoardNotation={showCoordinates}
       animationDuration={200}
       promotionDialogVariant="modal"
-    />
+      />
+      <BoardMarkerOverlay
+        selectedSquare={selectedSquare}
+        legalTargets={legalTargets}
+        captureTargets={captureTargets}
+        orientation={orientation}
+      />
+      <BoardArrowOverlay arrows={mergedArrows} orientation={orientation} />
+    </div>
   );
 }
 

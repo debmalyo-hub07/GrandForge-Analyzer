@@ -23,6 +23,7 @@ export interface ImportedGameClientSide extends RawImportedGame {
   moveSanList: string[];
   plyCount: number;
   engineReady: true;
+  reviewedNodeIds: string[];
   metadata: {
     white: string;
     black: string;
@@ -227,6 +228,9 @@ function buildIndexedGame(raw: RawImportedGame): ImportedGameClientSide | null {
       moveSanList,
       plyCount: moveUciList.length,
       engineReady: true,
+      // Populated by buildIndexedGameFromTree once loaded into the move tree;
+      // a server-fetched game carries no local node ids of its own.
+      reviewedNodeIds: [],
       metadata: {
         white: raw.white,
         black: raw.black,

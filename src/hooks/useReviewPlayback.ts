@@ -1,19 +1,6 @@
 import { useEffect } from 'react';
 import { useReviewStore } from '../store/reviewStore';
-import { useGameStore } from '../store/gameStore';
-import type { MoveTree } from '../types/moveTree';
-
-function getMainlineIdAtPly(tree: MoveTree, ply: number): string | null {
-  let node = tree.nodes[tree.rootId];
-  let i = 0;
-  while (node && i < ply) {
-    if (node.children.length === 0) break;
-    const nextId: string = node.children[0];
-    node = tree.nodes[nextId];
-    i++;
-  }
-  return node ? node.id : null;
-}
+import { useGameStore, getNodeIdAtPly } from '../store/gameStore';
 
 export function useReviewPlayback() {
   const isReviewMode = useReviewStore((s) => s.isReviewMode);
@@ -25,7 +12,12 @@ export function useReviewPlayback() {
   useEffect(() => {
     if (!isReviewMode || !hasResult) return;
     const tree = useGameStore.getState().moveTree;
-    const nodeId = getMainlineIdAtPly(tree, currentReviewPly);
+    // Follow the exact line the review was computed on (reviewedNodeIds). This
+    // is what fixes the variation desync: a review of an off-mainline line plays
+    // back along THAT line, not children[0]. Legacy results without line
+    // identity fall back to the mainline walk inside getNodeIdAtPly.
+    const reviewedNodeIds = useReviewStore.getState().result?.reviewedNodeIds;
+    const nodeId = getNodeIdAtPly(tree, currentReviewPly, reviewedNodeIds);
     if (nodeId) useGameStore.getState().goToNode(nodeId);
   }, [currentReviewPly, isReviewMode, hasResult]);
 }
