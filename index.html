@@ -5,21 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0a" />
-    <meta name="description" content="GrandForge — Forge Your Game. Master the Board. Multi-engine Stockfish chess analysis with full game review, live analysis, and Chess.com / Lichess import." />
+    <meta name="description" content="Free online chess game review and analysis powered by Stockfish 18. Get move-by-move accuracy, brilliant/blunder classification, and evaluation graphs. Import games from Chess.com and Lichess — no signup, unlimited reviews." />
+    <meta name="keywords" content="chess analysis, chess game review, free chess analyzer, stockfish online, chess accuracy, blunder check, chess.com game review free, lichess analysis, chess engine online" />
     <link rel="canonical" href="https://grand-forge-analyzer.vercel.app/" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
     <meta property="og:site_name" content="GrandForge" />
-    <meta property="og:title" content="GrandForge — Forge Your Game" />
-    <meta property="og:description" content="Production-grade chess analysis platform powered by Stockfish 18. Full game review, live analysis, and Chess.com / Lichess import." />
+    <meta property="og:title" content="GrandForge — Free Chess Game Review & Analysis" />
+    <meta property="og:description" content="Free unlimited chess game review powered by Stockfish 18. Move-by-move accuracy, brilliant/blunder classification, Chess.com and Lichess import. No signup required." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://grand-forge-analyzer.vercel.app/" />
     <meta property="og:image" content="https://grand-forge-analyzer.vercel.app/favicon.svg" />
 
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="GrandForge — Forge Your Game" />
-    <meta name="twitter:description" content="Multi-engine Stockfish chess analysis with full game review, live analysis, and Chess.com / Lichess import." />
+    <meta name="twitter:title" content="GrandForge — Free Chess Game Review & Analysis" />
+    <meta name="twitter:description" content="Free unlimited chess game review powered by Stockfish 18. Accuracy, blunder detection, Chess.com and Lichess import — no signup." />
     <meta name="twitter:image" content="https://grand-forge-analyzer.vercel.app/favicon.svg" />
 
     <script type="application/ld+json">
@@ -27,11 +28,42 @@
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "GrandForge",
+      "alternateName": "GrandForge Chess Analyzer",
       "url": "https://grand-forge-analyzer.vercel.app",
-      "description": "Production-grade chess analysis platform powered by Stockfish 18. Full game review, live analysis, and Chess.com / Lichess import.",
+      "description": "Free online chess game review and analysis powered by Stockfish 18. Move-by-move accuracy, brilliant and blunder classification, evaluation graphs, and Chess.com / Lichess game import.",
       "applicationCategory": "GameApplication",
       "operatingSystem": "Any",
+      "browserRequirements": "Requires a modern browser with WebAssembly support",
+      "featureList": "Unlimited free game review, Stockfish 18 engine analysis, Move accuracy and classification (Brilliant to Blunder), Chess.com and Lichess import, Opening book detection, Endgame tablebase probing, Evaluation bar and graphs, Performance rating estimate",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is GrandForge chess game review free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. GrandForge offers unlimited free game reviews powered by Stockfish 18 running in your browser. No signup or subscription is required." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I analyze my Chess.com or Lichess games?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Enter your Chess.com or Lichess username to import recent games, or paste any PGN directly, then run a full move-by-move review." }
+        },
+        {
+          "@type": "Question",
+          "name": "How are moves classified as Brilliant, Best, Mistake, or Blunder?",
+          "acceptedAnswer": { "@type": "Answer", "text": "GrandForge uses the same win-percentage model as Lichess: each move's drop in expected winning chances determines its class — Best, Excellent, Good, Inaccuracy, Mistake, or Blunder — with special detection for Brilliant, Great, Miss, and Book moves." }
+        },
+        {
+          "@type": "Question",
+          "name": "Which chess engine does GrandForge use?",
+          "acceptedAnswer": { "@type": "Answer", "text": "GrandForge runs Stockfish 18, 17, and 16 as WebAssembly directly in your browser, including a multi-threaded build for faster, deeper analysis. Your games never leave your device during analysis." }
+        }
+      ]
     }
     </script>
 
@@ -50,10 +82,20 @@
       gtag('config', 'G-KCD1NE483M');
     </script>
 
-    <title>GrandForge — Forge Your Game</title>
+    <title>GrandForge — Free Chess Game Review & Analysis with Stockfish 18</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>GrandForge — Free Chess Game Review &amp; Analysis</h1>
+      <p>
+        GrandForge is a free online chess analysis platform powered by Stockfish 18 running in your
+        browser. Import games from Chess.com or Lichess, paste a PGN, or play moves on the board to
+        get a full move-by-move game review: accuracy scores, Brilliant / Great / Best / Mistake /
+        Blunder classification, evaluation graphs, opening detection, and endgame tablebase lookups.
+        No signup, no limits. JavaScript is required to run the analysis engine.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
