@@ -11,6 +11,7 @@ Production-grade chess analysis platform powered by Stockfish 18 WASM, MongoDB A
 - **Multi-Engine Stockfish** -- switch between SF16, SF17, SF18 (lite, lite multi-threaded) at any time
 - **Live Infinite Analysis** -- engine auto-analyzes every board position with Lichess-style continuous deepening until you stop it, with optional Win/Draw/Loss (WDL) readout on the eval bar
 - **Full Game Review** -- Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Miss / Blunder classification with per-player accuracy, confidence-labeled game ratings, and Opening / Middlegame / Endgame phase accuracy + ACPL
+- **Evaluation Graph** -- chess.com/lichess-style eval chart over the whole game with key-moment markers (brilliants, mistakes, blunders); click anywhere to jump to that move
 - **Chess.com & Lichess Import** -- fetch any user's games by username, no login required
 - **Board Tools** -- Flip Board, Board Editor, Continue from Here, Paste FEN, inline notation & display toggles
 - **Premium Board Visuals** -- custom SVG engine arrows (single-shape, chess.com/lichess style with rank-based color hierarchy), DOM-based selection ring / legal-move dots / capture rings with gradient styling
