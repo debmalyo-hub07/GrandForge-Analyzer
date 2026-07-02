@@ -92,13 +92,7 @@ function formatPhaseMeta(moveCount: number, avgCpl: number | null): string {
   return `${moveCount} moves / ${avgCpl ?? 0} ACPL`;
 }
 
-export function ReviewSummaryCard({
-  result,
-  onStartReview,
-}: {
-  result: GameReviewResult;
-  onStartReview: () => void;
-}) {
+export function ReviewSummaryCard({ result }: { result: GameReviewResult }) {
   return (
     <MotionConfig reducedMotion="user">
       <motion.div
@@ -187,16 +181,6 @@ export function ReviewSummaryCard({
           );
         })}
       </div>
-
-      {/* Start Review button */}
-      <button
-        type="button"
-        className="start-review-btn"
-        aria-label="Start move-by-move review playback"
-        onClick={onStartReview}
-      >
-        <span aria-hidden="true">{'★'}</span> Start Review
-      </button>
     </motion.div>
     </MotionConfig>
   );

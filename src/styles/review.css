@@ -769,3 +769,73 @@
     transition: none !important;
   }
 }
+
+/* ============================================================
+   Evaluation graph (review summary)
+   ============================================================ */
+.eval-graph {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: #262421;
+}
+.eval-graph-svg {
+  display: block;
+  width: 100%;
+  height: 96px;
+  cursor: pointer;
+  outline: none;
+}
+.eval-graph-svg:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent, #c8a84b);
+}
+.eval-graph-bg {
+  fill: #3b3936;
+}
+.eval-graph-area {
+  fill: #e8e6e3;
+  opacity: 0.92;
+}
+.eval-graph-line {
+  fill: none;
+  stroke: #8a8785;
+  stroke-width: 1px;
+}
+.eval-graph-mid {
+  stroke: rgba(200, 168, 75, 0.55);
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
+}
+.eval-graph-hover {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1px;
+}
+.eval-graph-cursor {
+  stroke: #c8a84b;
+  stroke-width: 1.5px;
+}
+.eval-graph-dot {
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 0.3px;
+}
+.eval-graph-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  color: var(--text-muted, #9a958e);
+  min-height: 22px;
+  align-items: center;
+}
+.eval-graph-caption-move {
+  font-weight: 600;
+  color: var(--text-primary, #e8e6e3);
+}
+.eval-graph-caption-eval {
+  font-family: 'JetBrains Mono', monospace;
+}
+.eval-graph-caption-hint {
+  margin: 0 auto;
+  opacity: 0.7;
+}

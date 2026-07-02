@@ -10,6 +10,7 @@ import { GameReviewService } from '../../services/GameReviewService';
 import { review as reviewApi, reviewJobs } from '../../services/apiClient';
 import { ReviewProgressBar } from './ReviewProgressBar';
 import { ReviewSummaryCard } from './ReviewSummaryCard';
+import { EvalGraph } from './EvalGraph';
 import { ReviewMovePanel } from './ReviewMovePanel';
 import { useOpeningBookFens } from './useOpeningBookFens';
 import { formatAnnotatedPgn } from '../../utils/pgnUtils';
@@ -221,6 +222,7 @@ export function ReviewTab() {
       return (
         <MotionConfig reducedMotion="user">
           <div className="review-tab-root">
+            <EvalGraph result={result} />
             <ReviewMovePanel />
             <Button
               variant="ghost"
@@ -239,7 +241,8 @@ export function ReviewTab() {
     return (
       <MotionConfig reducedMotion="user">
         <div className="review-tab-root">
-        <ReviewSummaryCard result={result} onStartReview={handleStartPlayback} />
+        <EvalGraph result={result} />
+        <ReviewSummaryCard result={result} />
         <div className="review-actions-row">
           <Button
             variant="primary"
