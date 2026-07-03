@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { motion, MotionConfig } from 'framer-motion';
-import { Sparkles, Play, RotateCcw, X, Download } from 'lucide-react';
+import { Sparkles, Play, RotateCcw, X, Download, Target } from 'lucide-react';
 import { useReviewStore } from '../../store/reviewStore';
 import { useEngineStore } from '../../store/engineStore';
 import { useGameStore, getMainlinePath, buildIndexedGameFromTree } from '../../store/gameStore';
@@ -13,6 +13,7 @@ import { ReviewSummaryCard } from './ReviewSummaryCard';
 import { EvalGraph } from './EvalGraph';
 import { ReviewMoveList } from './ReviewMoveList';
 import { ReviewMovePanel } from './ReviewMovePanel';
+import { BlunderPuzzleTrainer } from './BlunderPuzzleTrainer';
 import { useOpeningBookFens } from './useOpeningBookFens';
 import { formatAnnotatedPgn } from '../../utils/pgnUtils';
 import Button from '../ui/Button';
@@ -41,6 +42,7 @@ export function ReviewTab() {
 
   const [selectedDepth, setSelectedDepth] = useState<number>(18);
   const [isStarting, setIsStarting] = useState(false);
+  const [showPuzzles, setShowPuzzles] = useState(false);
   const serviceRef = useRef<GameReviewService | null>(null);
 
   // Stable client-side job id for progress checkpointing. Persists across
@@ -239,6 +241,16 @@ export function ReviewTab() {
       );
     }
 
+    if (showPuzzles) {
+      return (
+        <MotionConfig reducedMotion="user">
+          <div className="review-tab-root">
+            <BlunderPuzzleTrainer result={result} onExit={() => setShowPuzzles(false)} />
+          </div>
+        </MotionConfig>
+      );
+    }
+
     return (
       <MotionConfig reducedMotion="user">
         <div className="review-tab-root">
@@ -254,6 +266,18 @@ export function ReviewTab() {
             onClick={handleStartPlayback}
           >
             Start Review Playback
+          </Button>
+        </div>
+
+        <div className="review-actions-row">
+          <Button
+            variant="secondary"
+            size="md"
+            fullWidth
+            leftIcon={<Target size={14} />}
+            onClick={() => setShowPuzzles(true)}
+          >
+            Fix Your Blunders
           </Button>
         </div>
 

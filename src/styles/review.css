@@ -909,3 +909,114 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Blunder Puzzle Trainer ─────────────────────────────────────────────── */
+.bpt-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bpt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bpt-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.bpt-progress {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.bpt-progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.bpt-progress-fill {
+  height: 100%;
+  background: #96bc4b;
+  transition: width 0.25s ease;
+}
+.bpt-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.bpt-badge {
+  text-transform: capitalize;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+}
+.bpt-badge--mistake { background: #e68f39; }
+.bpt-badge--blunder { background: #ca3431; }
+.bpt-badge--miss    { background: #e05a5a; }
+.bpt-board {
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bpt-feedback-row {
+  min-height: 22px;
+  display: flex;
+  justify-content: center;
+}
+.bpt-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.bpt-feedback--ok   { color: #96bc4b; }
+.bpt-feedback--bad  { color: #e05a5a; }
+.bpt-feedback--hint { color: #f0c945; }
+.bpt-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bpt-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(150, 188, 75, 0.15);
+  color: #96bc4b;
+  font-weight: 600;
+  font-size: 13px;
+}
+.bpt-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.bpt-empty {
+  align-items: center;
+  text-align: center;
+  padding: 24px 12px;
+}
+.bpt-empty-icon { color: #96bc4b; }
+.bpt-empty-title {
+  margin: 8px 0 4px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.bpt-empty-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
