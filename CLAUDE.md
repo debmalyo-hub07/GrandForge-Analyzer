@@ -94,7 +94,7 @@ Route modules live under `api/_lib/routes/**`, each exporting a default Express 
 
 ### Frontend
 
-Single-page app (`src/App.tsx`): two routes (`/` and `/game/:id`) both render `AnalyzerPage`; everything else is `NotFoundPage`. The board is `react-chessboard`, move legality/SAN/FEN via `chess.js`. `useAutoAnalysis` debounces (150 ms) live analysis on every FEN change and stops on terminal positions. Components are grouped by domain under `src/components/` (board, engine, evaluation, review, import, navigation, layout, ui). Path alias `@/*` → `src/*`.
+Single-page app (`src/App.tsx`): `/` and `/game/:id` both render `AnalyzerPage`; static content routes `/privacy`, `/learn/chess-accuracy`, `/learn/move-classifications` render prose pages via the shared `StaticPage` shell (`src/pages/StaticPage.tsx` — Header/Footer + `.static-prose`, styles at end of `src/styles/global.css`); everything else is `NotFoundPage`. The content pages are SEO entry points (linked from `Footer`, listed in `public/sitemap.xml`) and rely on `vercel.json`'s catch-all rewrite `/((?!api/).*) → /index.html` for direct-load/refresh — no per-route config. When adding a content page: create it, register the route, link it in `Footer`, add it to `sitemap.xml`. The board is `react-chessboard`, move legality/SAN/FEN via `chess.js`. `useAutoAnalysis` debounces (150 ms) live analysis on every FEN change and stops on terminal positions. Components are grouped by domain under `src/components/` (board, engine, evaluation, review, import, navigation, layout, ui). Path alias `@/*` → `src/*`.
 
 **Board overlays**: `ChessBoardWrapper` wraps `<Chessboard/>` in a `.gf-board` relative container and renders two overlay layers on top of it:
 
