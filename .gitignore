@@ -66,3 +66,6 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
+
+# Local UX-tour screenshots (not distributed)
+.ux-tour/
