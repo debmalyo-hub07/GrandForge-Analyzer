@@ -839,3 +839,73 @@
   margin: 0 auto;
   opacity: 0.7;
 }
+
+/* ============================================================
+   Review move list (annotated, chess.com style)
+   ============================================================ */
+.rml-root {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.rml-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 1fr;
+  align-items: stretch;
+  gap: 2px;
+}
+.rml-num {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted, #9a958e);
+}
+.rml-half {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary, #e8e6e3);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.rml-half:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.rml-half.is-current {
+  background: rgba(200, 168, 75, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(200, 168, 75, 0.55);
+}
+.rml-half--empty {
+  pointer-events: none;
+}
+.rml-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.rml-san {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

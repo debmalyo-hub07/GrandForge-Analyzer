@@ -11,6 +11,7 @@ import { review as reviewApi, reviewJobs } from '../../services/apiClient';
 import { ReviewProgressBar } from './ReviewProgressBar';
 import { ReviewSummaryCard } from './ReviewSummaryCard';
 import { EvalGraph } from './EvalGraph';
+import { ReviewMoveList } from './ReviewMoveList';
 import { ReviewMovePanel } from './ReviewMovePanel';
 import { useOpeningBookFens } from './useOpeningBookFens';
 import { formatAnnotatedPgn } from '../../utils/pgnUtils';
@@ -243,6 +244,7 @@ export function ReviewTab() {
         <div className="review-tab-root">
         <EvalGraph result={result} />
         <ReviewSummaryCard result={result} />
+        <ReviewMoveList result={result} />
         <div className="review-actions-row">
           <Button
             variant="primary"
