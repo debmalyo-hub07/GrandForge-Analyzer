@@ -48,13 +48,19 @@ export async function connectDB(): Promise<mongoose.Connection> {
     throw new Error('MONGODB_URI is not configured');
   }
 
+  // Vercel sets VERCEL=1. Serverless invocations are short-lived and many, so
+  // each keeps a tiny pool with fast-failing sockets; the persistent server
+  // (Render / local dev) carries all traffic through one process, so it gets a
+  // real pool and a socket timeout that survives long cursor walks.
+  const serverless = !!process.env.VERCEL;
+
   connecting = mongoose
     .connect(process.env.MONGODB_URI!, {
       dbName: 'chess-analyzer',
       bufferCommands: false,
-      maxPoolSize: 5,
+      maxPoolSize: serverless ? 5 : 20,
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
+      socketTimeoutMS: serverless ? 10000 : 45000,
     })
     .then((conn) => {
       cached = conn.connection;

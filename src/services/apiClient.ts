@@ -1,14 +1,23 @@
 // src/services/apiClient.ts
 import axios, { AxiosInstance } from 'axios';
+import {
+  getActiveApiBase,
+  getApiBases,
+  initApiBaseProbe,
+  isFailoverEligible,
+  markPrimaryFailed,
+} from './apiBase';
 
 const TOKEN_KEY = 'grandforge_token';
 
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: '/api',
+  baseURL: getActiveApiBase(),
   headers: { 'Content-Type': 'application/json' },
 });
 
 apiClient.interceptors.request.use((config) => {
+  // Re-read per request: failover may have moved the active base.
+  config.baseURL = getActiveApiBase();
   const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
   if (token) {
     config.headers = config.headers ?? {};
@@ -16,6 +25,33 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Sticky failover: a request that failed at the transport/gateway level is
+// replayed ONCE against the same-origin fallback; subsequent requests go
+// straight there (see apiBase.ts for the recovery re-probe).
+apiClient.interceptors.response.use(undefined, (error) => {
+  const { fallback } = getApiBases();
+  const config = error?.config as (typeof error)['config'] & { _gfRetried?: boolean };
+  // Guard on where THIS request went (config.baseURL, stamped at dispatch),
+  // not on the global sticky state: of N concurrent requests that all failed
+  // against the primary, every one must replay on the fallback — the first
+  // flips the sticky state, and the rest would otherwise be rejected outright.
+  if (
+    fallback &&
+    config &&
+    !config._gfRetried &&
+    config.baseURL !== fallback &&
+    isFailoverEligible(error)
+  ) {
+    markPrimaryFailed();
+    config._gfRetried = true;
+    config.baseURL = getActiveApiBase();
+    return apiClient.request(config);
+  }
+  return Promise.reject(error);
+});
+
+initApiBaseProbe();
 
 export function setAuthToken(token: string | null): void {
   if (typeof window === 'undefined') return;

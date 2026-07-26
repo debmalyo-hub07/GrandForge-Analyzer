@@ -59,7 +59,13 @@ app.use((req, res, next) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.status(200).json({ ok: true });
+  // Also the keep-alive pinger + failover-probe target: cheap, no DB touch.
+  // This handler lives on the OUTER app, which has no cors() middleware — the
+  // browser boot/recovery probe (src/services/apiBase.ts) fetches it
+  // cross-origin from the frontend, so it must send ACAO itself. Wildcard is
+  // correct: public endpoint, no credentials on the probe fetch.
+  res.set('Access-Control-Allow-Origin', '*');
+  res.status(200).json({ ok: true, uptime: Math.round(process.uptime()) });
 });
 
 // Order matters: more specific literal paths must precede the `[^/]+` param

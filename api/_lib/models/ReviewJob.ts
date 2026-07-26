@@ -65,6 +65,10 @@ const ReviewJobSchema = new Schema<IReviewJob>({
 
 ReviewJobSchema.index({ userId: 1, status: 1, updatedAt: -1 });
 ReviewJobSchema.index({ clientJobId: 1, userId: 1 }, { unique: true, sparse: true });
-ReviewJobSchema.index({ updatedAt: -1 });
+// 30-day TTL: job records are progress telemetry — results live on
+// Game.reviewResult / Session. Replaces the plain { updatedAt: -1 } index
+// (single-field indexes serve both sort directions; an old -1 index may
+// linger in Atlas — harmless, drop manually if noticed).
+ReviewJobSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 2_592_000 });
 
 export default (mongoose.models.ReviewJob as mongoose.Model<IReviewJob>) || mongoose.model<IReviewJob>('ReviewJob', ReviewJobSchema);

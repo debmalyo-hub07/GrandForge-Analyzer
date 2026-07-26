@@ -27,8 +27,14 @@ app.post('/api/engine-index/migrate', async (req, res) => {
     let migrated = 0;
     let failed = 0;
 
+    // Batch cap: the serverless 30 s maxDuration used to bound this walk; on
+    // the persistent server nothing else would. Callers page with ?limit=N and
+    // repeat while `remaining > 0`.
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 5000);
+
     const cursor = Game.find({ engineReady: { $ne: true } })
       .select('_id pgn')
+      .limit(limit)
       .lean()
       .cursor();
 
@@ -63,7 +69,8 @@ app.post('/api/engine-index/migrate', async (req, res) => {
       }
     }
 
-    return res.status(200).json({ migrated, failed });
+    const remaining = await Game.countDocuments({ engineReady: { $ne: true } });
+    return res.status(200).json({ migrated, failed, remaining });
   } catch (err) {
     // SEC-2: log detail server-side, return a generic message to clients.
     console.error('GrandForge engine index migration error:', err);

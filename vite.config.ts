@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     // Pure-logic units run in node; jsdom not needed for the utils under test.
     environment: 'node',
-    include: ['src/**/*.{test,spec}.ts'],
+    include: ['src/**/*.{test,spec}.ts', 'api/_lib/**/*.{test,spec}.ts'],
     // Exclude the WASM worker glue — those need a browser, covered by Playwright.
     exclude: ['node_modules/**', 'dist/**', 'src/**/*.browser.test.ts'],
   },

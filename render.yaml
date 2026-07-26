@@ -1,0 +1,37 @@
+# Render Blueprint — persistent GrandForge API (free tier).
+#
+# The frontend stays on Vercel; this service is the PRIMARY API host the
+# client targets via VITE_API_BASE_URL (.env.production). The Vercel
+# serverless function remains deployed as automatic fallback.
+#
+# The service NAME determines the URL (https://grandforge-api.onrender.com);
+# if you change it, update .env.production and the vercel.json CSP connect-src.
+#
+# Free-tier notes: 512 MB / 0.1 vCPU, spins down after 15 min idle (~30–60 s
+# cold start), 750 instance-hours per month — one always-on service fits
+# (~744 h). Keep it warm with an external pinger (see docs/deploy-render.md).
+services:
+  - type: web
+    name: grandforge-api
+    runtime: node
+    plan: free
+    # Pick the region closest to your MongoDB Atlas cluster (API↔DB latency
+    # dominates); singapore is closest to Atlas Mumbai/Singapore clusters.
+    region: singapore
+    # Runtime deps only — tsx runs the TypeScript directly, no build step.
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run api:start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://grand-forge-analyzer.vercel.app
+      # Secrets — set in the Render dashboard when the blueprint prompts;
+      # values live in the local .env (never committed).
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_KEY
+        sync: false

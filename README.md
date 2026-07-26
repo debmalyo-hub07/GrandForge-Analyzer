@@ -115,6 +115,7 @@ Stockfish engine, board, moves, navigation, and review all work without the API.
 | `npm run dev` | Start API + Vite concurrently (full stack) |
 | `npm run web:dev` | Frontend only (Vite, :5173) |
 | `npm run api:dev` | API only (Express, :3000) |
+| `npm run api:start` | Same entry, used by Render (`PORT` env wins) |
 | `npm run build` | TypeScript check + Vite production build |
 | `npm run typecheck` | `tsc --noEmit` |
 
@@ -175,7 +176,10 @@ Review scoring uses Expected Points / Win% loss rather than raw centipawn loss f
 
 ### API
 
-All 25 route handlers are consolidated behind one Vercel Serverless Function (`api/[...path].ts`) via a regex dispatch table in `api/_lib/router.ts`. This stays within Vercel Hobby's 12-function limit.
+All 25 route handlers are consolidated behind one regex dispatch table in `api/_lib/router.ts`, which is **dual-deployed**:
+
+- **Primary**: persistent Express server on Render's free tier (`server/index.ts`, blueprint `render.yaml`) — see **[docs/deploy-render.md](docs/deploy-render.md)** for the full runbook (service setup, secrets, keep-alive pinger, failover verification).
+- **Fallback**: one Vercel Serverless Function (`api/[...path].ts`) — stays within Vercel Hobby's 12-function limit. The client fails over to it automatically whenever the Render host is unreachable.
 
 ---
 
