@@ -125,34 +125,30 @@ Stockfish engine, board, moves, navigation, and review all work without the API.
 
 ```
 GrandForge-Analyzer/
-  api/                        # Vercel Serverless API
-    [...path].ts              # Single serverless function entry point
-    _lib/
-      router.ts               # Consolidated Express router (25 routes)
-      db.ts                   # MongoDB connection (manual .env loading)
-      auth.ts                 # JWT auth middleware
-      createApp.ts            # Express app factory (CORS, rate limit)
-      models/                 # Mongoose models
-      routes/                 # Route handlers by domain
-  src/                        # React frontend
-    components/               # UI components by domain
-      board/                  # Chess board, controls, themes, arrow/marker overlays
-      engine/                 # Engine controls, lines, stats
-      evaluation/             # Eval bar (vertical + horizontal)
-      review/                 # Review tab, summary, move panel
-      import/                 # PGN/FEN import, platform import
-      navigation/             # Move list, navigation controls
-      layout/                 # Header, footer, analyzer layout
-      ui/                     # Shared primitives (Button, Tabs, etc.)
-    hooks/                    # Custom React hooks
-    services/                 # Engine manager, review service, API client
-    store/                    # Zustand stores
-    types/                    # TypeScript type definitions
-    styles/                   # CSS (tokens, global, review, board themes)
-    utils/                    # Pure utility functions
-  public/
-    stockfish/                # WASM engine binaries
-    pieces/                   # Piece set SVGs
+  api/                        # Vercel serverless adapter (1 file, re-exports backend/router)
+    [...path].ts              # The single serverless function (fallback deploy)
+  backend/                    # Express API (persistent server on Render = primary)
+    index.ts                  # Server entry (Render / npm run dev)
+    router.ts                 # Consolidated Express router (25 routes)
+    db.ts                     # MongoDB connection (manual .env loading)
+    auth.ts                   # JWT auth middleware
+    createApp.ts              # Express app factory (CORS, rate limit)
+    models/                   # Mongoose models
+    routes/                   # Route handlers by domain
+  frontend/                   # React app (Vite root; envDir stays repo root)
+    index.html
+    src/
+      components/             # UI components by domain (board, engine, evaluation,
+                              #   review, import, navigation, layout, ui)
+      hooks/                  # Custom React hooks
+      services/               # Engine manager, review service, API client
+      store/                  # Zustand stores
+      types/                  # TypeScript type definitions
+      styles/                 # CSS (tokens, global, review, board themes)
+      utils/                  # Pure utility functions
+    public/
+      stockfish/              # WASM engine binaries
+      pieces/                 # Piece set SVGs
   scripts/                    # Seed scripts, build helpers
 ```
 
@@ -176,9 +172,9 @@ Review scoring uses Expected Points / Win% loss rather than raw centipawn loss f
 
 ### API
 
-All 25 route handlers are consolidated behind one regex dispatch table in `api/_lib/router.ts`, which is **dual-deployed**:
+All 25 route handlers are consolidated behind one regex dispatch table in `backend/router.ts`, which is **dual-deployed**:
 
-- **Primary**: persistent Express server on Render's free tier (`server/index.ts`, blueprint `render.yaml`) — see **[docs/deploy-render.md](docs/deploy-render.md)** for the full runbook (service setup, secrets, keep-alive pinger, failover verification).
+- **Primary**: persistent Express server on Render's free tier (`backend/index.ts`, blueprint `render.yaml`) — see **[docs/deploy-render.md](docs/deploy-render.md)** for the full runbook (service setup, secrets, keep-alive pinger, failover verification).
 - **Fallback**: one Vercel Serverless Function (`api/[...path].ts`) — stays within Vercel Hobby's 12-function limit. The client fails over to it automatically whenever the Render host is unreachable.
 
 ---

@@ -1,9 +1,9 @@
 # Deploying the GrandForge API to Render (free tier)
 
-The repo dual-deploys one API codebase (`api/_lib/router.ts`):
+The repo dual-deploys one API codebase (`backend/router.ts`):
 
-- **Primary** — persistent Express server on Render (`server/index.ts`, blueprint `render.yaml`).
-- **Fallback** — the existing Vercel serverless function (`api/[...path].ts`), same routing table, kept deployed. The client (`src/services/apiBase.ts`) probes the primary at boot and fails over stickily to same-origin `/api` whenever Render is unreachable, re-probing every 5 minutes.
+- **Primary** — persistent Express server on Render (`backend/index.ts`, blueprint `render.yaml`).
+- **Fallback** — the existing Vercel serverless function (`api/[...path].ts`), same routing table, kept deployed. The client (`frontend/src/services/apiBase.ts`) probes the primary at boot and fails over stickily to same-origin `/api` whenever Render is unreachable, re-probing every 5 minutes.
 
 ## One-time setup (~10 minutes, no credit card)
 
@@ -41,8 +41,8 @@ Delete or blank `VITE_API_BASE_URL` in `.env.production` and push — the client
 
 ## Operational notes
 
-- **Rate limit**: 150 requests / 15 min / IP **per route module** (~25 independent buckets, `api/_lib/createApp.ts` — a single global bucket would 429 a normal game review's ~160 position-cache requests). In-memory — resets on restart/deploy.
+- **Rate limit**: 150 requests / 15 min / IP **per route module** (~25 independent buckets, `backend/createApp.ts` — a single global bucket would 429 a normal game review's ~160 position-cache requests). In-memory — resets on restart/deploy.
 - **Admin migrate**: `POST /api/engine-index/migrate` (header `x-admin-key`) now pages: `?limit=N` (default 500, max 5000), response includes `remaining` — repeat until 0. The serverless 30 s ceiling no longer applies on Render.
 - **ReviewJob TTL**: job telemetry auto-expires 30 days after last update (Mongo TTL on `updatedAt`). Review RESULTS are unaffected (they live on Game/Session).
-- **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000`; serverless keeps the old tight settings (`api/_lib/db.ts`, keyed on `process.env.VERCEL`).
+- **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000`; serverless keeps the old tight settings (`backend/db.ts`, keyed on `process.env.VERCEL`).
 - **Logs**: Render dashboard → Logs streams the request logger output (method, path, status, ms).

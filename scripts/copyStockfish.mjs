@@ -3,7 +3,7 @@ import { resolve } from 'path';
 
 // The `stockfish` npm package ships builds in `bin/` (not `src/` as older docs suggest).
 const sfDir = resolve('node_modules/stockfish/bin');
-const destDir = resolve('public/stockfish');
+const destDir = resolve('frontend/public/stockfish');
 if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
 
 if (!existsSync(sfDir)) {

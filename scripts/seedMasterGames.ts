@@ -6,9 +6,9 @@
  *
  * Run: npx tsx scripts/seedMasterGames.ts
  */
-import { connectDB } from '../api/_lib/db';
-import MasterGame from '../api/_lib/models/MasterGame';
-import { indexGame } from '../api/_lib/indexGame';
+import { connectDB } from '../backend/db';
+import MasterGame from '../backend/models/MasterGame';
+import { indexGame } from '../backend/indexGame';
 import { MASTER_GAMES_PGN } from './masterGamesPGN';
 
 async function seedMasterGames(): Promise<void> {

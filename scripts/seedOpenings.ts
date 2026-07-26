@@ -7,8 +7,8 @@
  * Run: npx tsx scripts/seedOpenings.ts
  */
 import { Chess } from 'chess.js';
-import { connectDB } from '../api/_lib/db';
-import Opening from '../api/_lib/models/Opening';
+import { connectDB } from '../backend/db';
+import Opening from '../backend/models/Opening';
 
 const ECO_FILES = ['a', 'b', 'c', 'd', 'e'];
 const BASE_URL = 'https://raw.githubusercontent.com/lichess-org/chess-openings/master';

@@ -1,12 +1,14 @@
 /**
- * GrandForge — the single Vercel Serverless Function.
+ * GrandForge — the single Vercel Serverless Function (fallback API deploy).
  *
  * A catch-all dynamic route ([...path]) so every /api/* request lands on ONE
- * function, keeping us under Vercel Hobby's 12-function-per-deployment cap. All
- * routing lives in the shared Express app in ./_lib/router.ts (sibling modules
- * under api/_lib/** are excluded from Vercel function detection by the leading
- * underscore, so they don't each become a function).
+ * function, keeping us under Vercel Hobby's 12-function-per-deployment cap.
+ * This file exists ONLY to satisfy Vercel's root-`api/` functions convention;
+ * the real backend lives in backend/ (router.ts + routes/**) and is primarily
+ * deployed as a persistent server on Render (backend/index.ts, render.yaml).
+ * `vercel.json` sets `includeFiles: "backend/**"` so the bundled function can
+ * resolve this import at runtime.
  */
-import app from './_lib/router';
+import app from '../backend/router';
 
 export default app;

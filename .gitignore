@@ -18,7 +18,7 @@ build/
 # ~113 MB stockfish-18-single.wasm that exceeds GitHub's 100 MB per-file limit.
 # The real sf16 / sf17.1 binaries + the sf16 NNUE network are NOT shipped by npm
 # and must be committed (see the REQUIRED_REAL guard in copyStockfish.mjs).
-public/stockfish/stockfish-18-*
+frontend/public/stockfish/stockfish-18-*
 
 # Editor
 .vscode/
@@ -33,7 +33,7 @@ public/stockfish/stockfish-18-*
 # Tests (kept locally, not in repo)
 tests/
 playwright.config.ts
-src/**/__tests__/
+frontend/src/**/__tests__/
 
 # OS
 .DS_Store

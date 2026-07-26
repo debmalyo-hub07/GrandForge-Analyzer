@@ -1,20 +1,19 @@
 /**
  * GrandForge — consolidated API router.
  *
- * Vercel Hobby allows at most 12 Serverless Functions per deployment, so the
- * ~25 per-route handlers cannot each be their own function. Instead every route
- * module (an Express app built by createApp()) is mounted here behind a single
- * regex dispatch table, and this one app is exported as the lone serverless
- * function `api/[...path].ts`. The local dev shim (scripts/apiDev.ts) imports the
- * SAME app and only adds .listen(), so dev and prod share one routing table.
+ * Two deployment entry points import this one app:
+ *   1. backend/index.ts — the persistent server (Render primary; local `npm run dev`)
+ *   2. api/[...path].ts — the single Vercel Serverless Function (fallback).
+ *      Vercel Hobby allows at most 12 functions per deployment, so the ~25
+ *      per-route handlers cannot each be their own function; the 1-file adapter
+ *      keeps us at one.
  *
  * Each route module registers its own FULL path (e.g. app.get('/api/openings/lookup')),
  * so the dispatcher forwards (req, res, next) untouched and the inner app matches
  * on req.path — identical semantics to the old one-file-per-function layout.
  *
- * Adding a new route: drop the handler under api/_lib/routes/** and register one
- * line in the `routes` table below. (api/_lib/** is underscore-prefixed, so Vercel
- * never turns these modules into separate functions.)
+ * Adding a new route: drop the handler under backend/routes/** and register one
+ * line in the `routes` table below.
  */
 import express from 'express';
 

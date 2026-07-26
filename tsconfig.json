@@ -27,11 +27,11 @@
     "useDefineForClassFields": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["frontend/src/*"]
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "api/**/*.ts", "scripts/**/*.ts", "server/**/*.ts"],
+  "include": ["frontend/src/**/*.ts", "frontend/src/**/*.tsx", "api/**/*.ts", "backend/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", ".vercel"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
