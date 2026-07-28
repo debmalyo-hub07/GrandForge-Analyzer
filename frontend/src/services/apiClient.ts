@@ -121,12 +121,14 @@ export const games = {
 // ────────────────────────────────────────────────────────────────────────────
 // Import (external sources)
 // ────────────────────────────────────────────────────────────────────────────
+// POST, not GET: both routes write to Mongo, so as GETs they were triggerable
+// cross-site from any third-party page. Params move to the JSON body.
 export const importApi = {
   chesscom: (params: { username: string; type?: string; count?: number }) =>
-    apiClient.get('/import/chesscom', { params }).then(r => r.data),
+    apiClient.post('/import/chesscom', params).then(r => r.data),
 
   lichess: (params: { username: string; perfType?: string; count?: number }) =>
-    apiClient.get('/import/lichess', { params }).then(r => r.data),
+    apiClient.post('/import/lichess', params).then(r => r.data),
 };
 export { importApi as import };
 

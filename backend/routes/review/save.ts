@@ -5,8 +5,15 @@
  *
  * Persists a GameReviewResult produced by GameReviewService.reviewGame()
  * to either a game document (games.reviewResult) or a session document
- * (sessions.reviewResult, owner-only). Rate-limited to 10 req/min per IP.
+ * (sessions.reviewResult, owner-only).
+ *
+ * Rate limiting comes from createApp() (express-rate-limit, 150/15min per IP on
+ * this module's own bucket). A hand-rolled per-IP Map used to sit here as well;
+ * it never evicted keys, so on the persistent server every IP that ever POSTed
+ * leaked an entry for the process lifetime — harmless on serverless, a slow leak
+ * on a 512 MB box with 30-day uptime.
  */
+import mongoose from 'mongoose';
 import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import { optionalAuth, type AuthRequest } from '../../auth';
@@ -14,40 +21,10 @@ import { reviewSaveSchema } from '../../zodSchemas';
 import Game from '../../models/Game';
 import Session from '../../models/Session';
 
-/* ---------- per-IP rate limit (10 req/min) ---------- */
-
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 10;
-const ipHits = new Map<string, number[]>();
-
-function clientIp(req: AuthRequest): string {
-  const fwd = (req.headers['x-forwarded-for'] || '') as string;
-  return fwd.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-}
-
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (hits.length >= RATE_LIMIT_MAX) {
-    ipHits.set(ip, hits);
-    return true;
-  }
-  hits.push(now);
-  ipHits.set(ip, hits);
-  return false;
-}
-
-/* ---------- handler ---------- */
-
 const app = createApp();
 
 app.post('/api/review/save', optionalAuth, async (req: AuthRequest, res) => {
   try {
-    const ip = clientIp(req);
-    if (rateLimited(ip)) {
-      return res.status(429).json({ error: 'Too many review saves — try again in a minute' });
-    }
-
     const parsed = reviewSaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid request', details: parsed.error.issues });
@@ -58,6 +35,12 @@ app.post('/api/review/save', optionalAuth, async (req: AuthRequest, res) => {
     await connectDB();
 
     if (gameId) {
+      // The schema types gameId as a bounded string, so a non-ObjectId reaches
+      // findById and throws a CastError → generic 500. Every other id-taking
+      // route validates the shape first; this one was the outlier.
+      if (!mongoose.isValidObjectId(gameId)) {
+        return res.status(400).json({ error: 'Invalid gameId' });
+      }
       const game = await Game.findById(gameId);
       if (!game) return res.status(404).json({ error: 'Game not found' });
 

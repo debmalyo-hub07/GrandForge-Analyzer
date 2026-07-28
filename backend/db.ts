@@ -6,8 +6,21 @@ let cached: mongoose.Connection | null = null;
 let connecting: Promise<mongoose.Connection> | null = null;
 let envLoaded = false;
 
-function loadLocalEnv(): void {
-  if (envLoaded || process.env.MONGODB_URI) return;
+/**
+ * Parse the repo-root `.env` into `process.env` for local runs (no dotenv
+ * dependency by design).
+ *
+ * The guard keys on `envLoaded` ALONE. It used to also early-return when
+ * `process.env.MONGODB_URI` was already set, which meant that exporting just
+ * that one variable in the shell made `.env` never parse at all — `JWT_SECRET`,
+ * `ADMIN_KEY`, `LICHESS_API_TOKEN` and `CHESS_COM_USER_AGENT` silently vanished
+ * and every authed request failed with "JWT_SECRET must be set and at least 32
+ * characters" for no visible reason. Real environment values still win: the
+ * per-key `process.env[key] !== undefined` check below never overwrites them,
+ * so platform-provided config (Render/Vercel) is unaffected.
+ */
+export function loadLocalEnv(): void {
+  if (envLoaded) return;
   envLoaded = true;
 
   const envPath = path.join(process.cwd(), '.env');

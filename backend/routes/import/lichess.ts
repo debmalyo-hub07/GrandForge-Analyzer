@@ -1,11 +1,16 @@
 /**
  * GrandForge — Lichess Game Import
  *
- * GET /api/import/lichess?username=&perfType=&count=
+ * POST /api/import/lichess  { username, perfType?, count? }
  *
  * Streams the player's games from Lichess as NDJSON (one JSON object per line),
  * runs every PGN through indexGame() to populate the Engine–Game Bridge index,
  * and upserts every game into the `games` collection.
+ *
+ * POST, not GET: this endpoint writes to Mongo and does 2 upstream fetches plus
+ * up to 50 chess.js PGN replays. As a GET it was cross-site triggerable — CORS
+ * only withholds the response from the calling page, it does not stop the
+ * handler from running, and a simple GET triggers no preflight.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createApp } from '../../createApp';
@@ -71,14 +76,56 @@ function pickResult(g: LichessNdjsonGame): string {
   return '1/2-1/2';
 }
 
+/**
+ * Every upstream call is bounded. Without this, undici's ~300 s default meant a
+ * slow Lichess response held an Express connection AND a Mongo pool slot for
+ * five minutes on a 0.1 vCPU / 512 MB instance; Vercel's `maxDuration: 30` used
+ * to be the only backstop and it doesn't exist on the persistent server.
+ * The NDJSON stream is the reason the signal has to cover the body read too,
+ * not just the headers.
+ */
+const UPSTREAM_TIMEOUT_MS = 8_000;
+
+class UpstreamTimeoutError extends Error {
+  constructor() {
+    super('Lichess request timed out');
+    this.name = 'UpstreamTimeoutError';
+  }
+}
+
+async function fetchText(
+  url: string,
+  headers: Record<string, string>
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    const text = res.ok ? await res.text() : '';
+    return { ok: res.ok, status: res.status, text };
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') throw new UpstreamTimeoutError();
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const app = createApp();
 
-app.get('/api/import/lichess', optionalAuth, async (req: AuthRequest, res) => {
+// Pointer for anything still calling the old GET shape.
+app.get('/api/import/lichess', (_req, res) => {
+  res.status(405).json({ error: 'Use POST' });
+});
+
+app.post('/api/import/lichess', optionalAuth, async (req: AuthRequest, res) => {
   try {
-    // Validate the query shape with the shared Zod schema (length/enum/range).
-    const q = importLichessSchema.safeParse(req.query);
+    // Validate the JSON body with the shared Zod schema (length/enum/range).
+    // `count` is z.coerce.number(), so the schema accepts a real JSON number
+    // as readily as the query string it used to receive.
+    const q = importLichessSchema.safeParse(req.body);
     if (!q.success) {
-      return res.status(400).json({ error: 'Invalid query', issues: q.error.issues });
+      return res.status(400).json({ error: 'Invalid request', issues: q.error.issues });
     }
 
     const username = q.data.username.trim();
@@ -88,20 +135,21 @@ app.get('/api/import/lichess', optionalAuth, async (req: AuthRequest, res) => {
     const count = Math.max(1, Math.min(50, q.data.count ?? 20));
 
     if (!username) {
-      return res.status(400).json({ error: 'username query parameter is required' });
+      return res.status(400).json({ error: 'username is required' });
     }
 
     await connectDB();
 
     // 1. Fetch profile
-    const profileRes = await fetch(`${LICHESS_BASE}/api/user/${encodeURIComponent(username)}`, {
-      headers: { Accept: 'application/json', ...(process.env.LICHESS_API_TOKEN ? { Authorization: `Bearer ${process.env.LICHESS_API_TOKEN}` } : {}) },
+    const profileRes = await fetchText(`${LICHESS_BASE}/api/user/${encodeURIComponent(username)}`, {
+      Accept: 'application/json',
+      ...(process.env.LICHESS_API_TOKEN ? { Authorization: `Bearer ${process.env.LICHESS_API_TOKEN}` } : {}),
     });
     if (!profileRes.ok) {
       const status = profileRes.status === 404 ? 404 : 502;
       return res.status(status).json({ error: status === 404 ? 'Player not found' : 'Lichess API unavailable' });
     }
-    const playerProfile: LichessPlayerProfile = await profileRes.json();
+    const playerProfile: LichessPlayerProfile = JSON.parse(profileRes.text);
 
     // 2. Stream NDJSON games
     const params = new URLSearchParams();
@@ -113,14 +161,13 @@ app.get('/api/import/lichess', optionalAuth, async (req: AuthRequest, res) => {
     if (perfType) params.set('perfType', perfType as LichessPerfType);
 
     const gamesUrl = `${LICHESS_BASE}/api/games/user/${encodeURIComponent(username)}?${params.toString()}`;
-    const gamesRes = await fetch(gamesUrl, { headers: authHeaders() });
-    if (!gamesRes.ok || !gamesRes.body) {
+    const gamesRes = await fetchText(gamesUrl, authHeaders());
+    if (!gamesRes.ok) {
       return res.status(gamesRes.status).json({ error: `Lichess games stream failed: ${gamesRes.status}` });
     }
 
-    // Read body as text and split by newlines (NDJSON)
-    const text = await gamesRes.text();
-    const lines = text.split('\n').filter((l) => l.trim().length > 0);
+    // NDJSON: one JSON object per line.
+    const lines = gamesRes.text.split('\n').filter((l) => l.trim().length > 0);
 
     const indexedGames: unknown[] = [];
     for (const line of lines) {
@@ -188,11 +235,19 @@ app.get('/api/import/lichess', optionalAuth, async (req: AuthRequest, res) => {
 
     return res.status(200).json({ games: indexedGames, playerProfile });
   } catch (err) {
+    if (err instanceof UpstreamTimeoutError) {
+      console.error('Lichess import timed out');
+      return res.status(504).json({ error: 'Lichess API timed out' });
+    }
     console.error('Lichess import error:', err);
     return res.status(500).json({ error: 'Lichess import failed' });
   }
 });
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  return app(req as never, res as never);
+// The router dispatches with (req, res, next). Forwarding `next` is what lets a
+// malformed JSON body — now reachable, since this route reads one — reach the
+// router's JSON error handler instead of express's HTML finalhandler. On Vercel
+// there is no next and express falls back to finalhandler, exactly as before.
+export default function handler(req: VercelRequest, res: VercelResponse, next?: unknown) {
+  return app(req as never, res as never, next as never);
 }
