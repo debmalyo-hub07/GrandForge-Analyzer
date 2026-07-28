@@ -16,6 +16,11 @@ const createSchema = z.object({
 
 const app = createApp();
 
+/** Per-user session cap. A session's move tree is capped at 5000 nodes
+ *  (~1.1 MB), so without a quota one account can consume the whole 512 MB
+ *  Atlas tier (data-audit §2e, §4). */
+const MAX_SESSIONS_PER_USER = 100;
+
 app.post('/api/sessions/create', requireAuth, async (req: AuthRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -31,6 +36,13 @@ app.post('/api/sessions/create', requireAuth, async (req: AuthRequest, res) => {
 
   try {
     await connectDB();
+
+    const existing = await Session.countDocuments({ userId: req.userId });
+    if (existing >= MAX_SESSIONS_PER_USER) {
+      return res.status(409).json({
+        error: `Session limit reached (${MAX_SESSIONS_PER_USER}). Delete an existing session to create a new one.`,
+      });
+    }
 
     const session = await Session.create({
       userId: req.userId,

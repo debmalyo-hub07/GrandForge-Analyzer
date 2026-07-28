@@ -46,3 +46,35 @@ Delete or blank `VITE_API_BASE_URL` in `.env.production` and push — the client
 - **ReviewJob TTL**: job telemetry auto-expires 30 days after last update (Mongo TTL on `updatedAt`). Review RESULTS are unaffected (they live on Game/Session).
 - **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000`; serverless keeps the old tight settings (`backend/db.ts`, keyed on `process.env.VERCEL`).
 - **Logs**: Render dashboard → Logs streams the request logger output (method, path, status, ms).
+
+## One-time Atlas index migration (after deploying the 2026-07 correctness fixes)
+
+`autoIndex` creates new indexes but never drops old ones. **The PGN-upload fix does not
+take effect until #1 is dropped** (same key, different options → `IndexOptionsConflict`
+blocks the new build). Confirm real names with `db.<coll>.getIndexes()` first; do NOT
+drop `tablebaseentries.fen_1` or any `_id_`.
+
+```js
+// 1. REQUIRED — old sparse dedupe index blocks the new partial one
+db.games.dropIndex('metadata.source_1_metadata.sourceGameId_1_userId_1');
+// 2. Superseded unique key (positions had 0 docs at audit time)
+db.positions.dropIndex('fen_1_engineVersion_1_depth_1');
+// 3. Redundant/unused (data-audit §1c)
+db.games.dropIndex('userId_1');
+db.games.dropIndex('metadata.sourceGameId_1');
+db.games.dropIndex('metadata.ecoCode_1');
+db.games.dropIndex('engineReady_1');
+db.masterGames.dropIndex('featured_1');
+db.masterGames.dropIndex('engineReady_1');
+db.masterGames.dropIndex('tags_1');
+db.masterGames.dropIndex('metadata.white_1');
+db.masterGames.dropIndex('metadata.black_1');
+db.reviewjobs.dropIndex('userId_1');
+db.reviewjobs.dropIndex('gameId_1');
+db.reviewjobs.dropIndex('clientJobId_1');
+db.reviewjobs.dropIndex('status_1');
+db.reviewjobs.dropIndex('userId_1_status_1_updatedAt_-1');
+db.sessions.dropIndex('userId_1');
+db.sessions.dropIndex('isPublic_1');
+db.openings.dropIndex('ecoCode_1');
+```

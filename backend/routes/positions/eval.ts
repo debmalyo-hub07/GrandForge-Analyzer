@@ -7,41 +7,54 @@
  * (optional) minimum depth, or null if no such cached evaluation exists.
  */
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import Position from '../../models/Position';
+import { ENGINE_VERSION_VALUES } from '../../zodSchemas';
 
 const app = createApp();
+
+const EvalQuerySchema = z.object({
+  fen: z.string().trim().min(1).max(120),
+  engine: z.enum(ENGINE_VERSION_VALUES).optional(),
+  depth: z.coerce.number().int().min(1).max(60).optional(),
+});
 
 app.get('/api/positions/eval', async (req: Request, res: Response) => {
   try {
     await connectDB();
 
-    const fen = req.query.fen;
-    const engine = req.query.engine;
-    const depthRaw = req.query.depth;
-
-    if (typeof fen !== 'string' || fen.trim().length === 0) {
-      return res.status(400).json({ error: 'Query param "fen" is required' });
+    // `req.query` values are strings (or arrays/objects under the default qs
+    // parser); zod both narrows the type and rejects an unknown engine id
+    // instead of letting it become a silent permanent cache miss.
+    const parsed = EvalQuerySchema.safeParse({
+      fen: typeof req.query.fen === 'string' ? req.query.fen : undefined,
+      engine: typeof req.query.engine === 'string' ? req.query.engine.trim() : undefined,
+      depth: typeof req.query.depth === 'string' && req.query.depth.trim().length > 0
+        ? req.query.depth.trim()
+        : undefined,
+    });
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid query', issues: parsed.error.issues });
     }
 
-    const query: Record<string, unknown> = { fen: fen.trim() };
+    const { fen, engine, depth } = parsed.data;
 
-    if (typeof engine === 'string' && engine.trim().length > 0) {
-      query.engineVersion = engine.trim();
-    }
+    const query: Record<string, unknown> = { fen };
+    if (engine) query.engineVersion = engine;
+    if (depth !== undefined) query.depth = { $gte: depth };
 
-    if (typeof depthRaw === 'string' && depthRaw.trim().length > 0) {
-      const minDepth = parseInt(depthRaw, 10);
-      if (Number.isFinite(minDepth)) {
-        query.depth = { $gte: minDepth };
-      }
-    }
-
-    const evaluation = await Position.findOne(query)
-      .sort({ depth: -1, computedAt: -1 })
-      .lean()
-      .exec();
+    // Bump `computedAt` on the hit, in the same round trip as the read: the
+    // 60-day TTL on that field is what keeps `positions` from growing without
+    // bound, and touching it on read turns the TTL into an LRU so positions
+    // people actually revisit survive (data-audit §4). `findOneAndUpdate`
+    // never inserts here — a miss matches nothing and returns null.
+    const evaluation = await Position.findOneAndUpdate(
+      query,
+      { $set: { computedAt: new Date() } },
+      { sort: { depth: -1, computedAt: -1 }, new: true, lean: true }
+    ).exec();
 
     return res.status(200).json({ evaluation: evaluation ?? null });
   } catch (err) {

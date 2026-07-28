@@ -3,11 +3,12 @@ import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import { requireAuth, type AuthRequest } from '../../auth';
 import User from '../../models/User';
+import { ENGINE_VERSION_VALUES } from '../../zodSchemas';
 
 const preferencesSchema = z.object({
   boardTheme: z.string().min(1).max(50).optional(),
   pieceSet: z.string().min(1).max(50).optional(),
-  defaultEngine: z.enum(['sf18-lite', 'sf18-full', 'sf17-lite', 'sf16-lite']).optional(),
+  defaultEngine: z.enum(ENGINE_VERSION_VALUES).optional(),
   defaultDepth: z.number().int().min(1).max(30).optional(),
   defaultMultiPV: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
   showCoordinates: z.boolean().optional(),

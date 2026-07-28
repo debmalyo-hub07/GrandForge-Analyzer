@@ -68,7 +68,7 @@ const OpeningRatingBucketSchema = new Schema<{ bucket: string; white: number; bl
 }, { _id: false });
 
 const OpeningSchema = new Schema<IOpening>({
-  ecoCode:      { type: String, required: true, trim: true, index: true },
+  ecoCode:      { type: String, required: true, trim: true },
   name:         { type: String, required: true, trim: true },
   family:       { type: String, required: true, trim: true },
   variation:    { type: String, default: '', trim: true },

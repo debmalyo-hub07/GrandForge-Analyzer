@@ -40,7 +40,7 @@ const MasterGameSchema = new Schema<IMasterGame>({
   moveUciList:  { type: [String], required: true, default: [] },
   moveSanList:  { type: [String], required: true, default: [] },
   plyCount:     { type: Number, required: true, default: 0 },
-  engineReady:  { type: Boolean, required: true, default: false, index: true },
+  engineReady:  { type: Boolean, required: true, default: false },
   phase: {
     openingEndsAtPly:    { type: Number, default: 0 },
     middlegameEndsAtPly: { type: Number, default: 0 },
@@ -60,14 +60,15 @@ const MasterGameSchema = new Schema<IMasterGame>({
     ecoCode:     { type: String },
     variant:     { type: String },
   },
-  tags:      { type: [String], default: [], index: true },
-  featured:  { type: Boolean, default: false, index: true },
+  tags:      { type: [String], default: [] },
+  featured:  { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 
 MasterGameSchema.index({ 'metadata.ecoCode': 1 });
-MasterGameSchema.index({ 'metadata.white': 1 });
-MasterGameSchema.index({ 'metadata.black': 1 });
 MasterGameSchema.index({ featured: 1, createdAt: -1 });
+// Deliberately no index on metadata.white / metadata.black: the only queries
+// that touch them are unanchored case-insensitive regexes (`master/games.ts`),
+// which cannot use an index anyway (data-audit §1c).
 
 export default (mongoose.models.MasterGame as mongoose.Model<IMasterGame>) || mongoose.model<IMasterGame>('MasterGame', MasterGameSchema);

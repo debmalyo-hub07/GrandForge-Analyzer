@@ -44,6 +44,20 @@ const PositionSchema = new Schema<IPosition>({
   computedAt:    { type: Date, default: Date.now },
 });
 
-PositionSchema.index({ fen: 1, engineVersion: 1, depth: 1 }, { unique: true });
+// The upsert in `routes/positions/cache.ts` filters on (fen, engineVersion),
+// so the unique key must be exactly that. It used to include `depth`, which
+// left the actual write key unprotected: two concurrent first-writes at
+// different depths produced two permanent rows for the same position, and a
+// later deeper write could then read the shallower row, pass the depth guard,
+// and collide with its sibling → E11000 → 500 (data-audit §2b, backend F4).
+// `depth` stays an ordinary field; the "deepest wins" guard reads it.
+PositionSchema.index({ fen: 1, engineVersion: 1 }, { unique: true });
+// 60-day TTL. `routes/positions/eval.ts` bumps `computedAt` on every cache
+// hit, which turns this from a time-to-live-from-creation clock into an LRU:
+// positions people actually revisit survive, one-off middlegame FENs (which
+// nobody ever transposes back into) age out. `positions` is the collection
+// that exhausts the 512 MB tier first — global, ownerless, and previously
+// unprunable (data-audit §4).
+PositionSchema.index({ computedAt: 1 }, { expireAfterSeconds: 5_184_000 });
 
 export default (mongoose.models.Position as mongoose.Model<IPosition>) || mongoose.model<IPosition>('Position', PositionSchema);

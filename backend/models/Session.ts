@@ -15,14 +15,14 @@ export interface ISession extends Document {
 }
 
 const SessionSchema = new Schema<ISession>({
-  userId:        { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userId:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
   title:         { type: String, required: true, trim: true, default: 'Untitled session' },
   pgn:           { type: String, required: true, default: '' },
   currentNodeId: { type: String, default: null },
   moveTree:      { type: Schema.Types.Mixed, default: {} },
   notes:         { type: String, default: '' },
   tags:          { type: [String], default: [] },
-  isPublic:      { type: Boolean, default: false, index: true },
+  isPublic:      { type: Boolean, default: false },
   reviewResult:  { type: Schema.Types.Mixed, default: null },
   createdAt:     { type: Date, default: Date.now },
   updatedAt:     { type: Date, default: Date.now },

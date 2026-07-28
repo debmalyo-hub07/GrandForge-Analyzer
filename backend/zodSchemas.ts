@@ -1,84 +1,23 @@
 import { z } from 'zod';
 
 // ─────────────────────────────────────────────────────────────
-// Auth
+// Engine versions — single source of truth for every server enum
 // ─────────────────────────────────────────────────────────────
 
-export const registerSchema = z.object({
-  email: z.string().email().toLowerCase().trim(),
-  username: z.string().trim().min(3).max(30),
-  password: z.string().min(8).max(128),
-});
-export type RegisterInput = z.infer<typeof registerSchema>;
-
-export const loginSchema = z.object({
-  email: z.string().email().toLowerCase().trim(),
-  password: z.string().min(1).max(128),
-});
-export type LoginInput = z.infer<typeof loginSchema>;
-
-export const updatePreferencesSchema = z
-  .object({
-    boardTheme: z.string().min(1).max(40).optional(),
-    pieceSet: z.string().min(1).max(40).optional(),
-    defaultEngine: z.enum(['sf18-lite', 'sf18-full', 'sf17-lite', 'sf16-lite']).optional(),
-    defaultDepth: z.number().int().min(1).max(30).optional(),
-    defaultMultiPV: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
-    showCoordinates: z.boolean().optional(),
-    showLegalMoves: z.boolean().optional(),
-    animationSpeed: z.enum(['fast', 'normal', 'slow']).optional(),
-    inlineNotation: z.boolean().optional(),
-    disclosureButtons: z.boolean().optional(),
-    moveAnnotations: z.boolean().optional(),
-    variationOpacity: z.number().min(0).max(100).optional(),
-  })
-  .strict();
-export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;
-
-// ─────────────────────────────────────────────────────────────
-// Games
-// ─────────────────────────────────────────────────────────────
-
-export const uploadPgnSchema = z.object({
-  pgn: z.string().min(1).max(500_000),
-  metadata: z
-    .object({
-      white: z.string().max(120).optional(),
-      black: z.string().max(120).optional(),
-      whiteElo: z.number().int().min(0).max(4000).optional(),
-      blackElo: z.number().int().min(0).max(4000).optional(),
-      event: z.string().max(200).optional(),
-      site: z.string().max(200).optional(),
-      date: z.string().max(40).optional(),
-      result: z.string().max(20).optional(),
-      timeControl: z.string().max(60).optional(),
-      opening: z.string().max(200).optional(),
-      ecoCode: z.string().max(10).optional(),
-      variant: z.string().max(40).optional(),
-    })
-    .optional(),
-});
-export type UploadPgnInput = z.infer<typeof uploadPgnSchema>;
-
-// ─────────────────────────────────────────────────────────────
-// Sessions
-// ─────────────────────────────────────────────────────────────
-
-export const createSessionSchema = z.object({
-  pgn: z.string().min(1).max(500_000),
-  title: z.string().max(200).optional(),
-  metadata: z.record(z.unknown()).optional(),
-});
-export type CreateSessionInput = z.infer<typeof createSessionSchema>;
-
-export const updateSessionSchema = z.object({
-  title: z.string().max(200).optional(),
-  pgn: z.string().min(1).max(500_000).optional(),
-  notes: z.string().max(50_000).optional(),
-  isPublic: z.boolean().optional(),
-  metadata: z.record(z.unknown()).optional(),
-});
-export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;
+/**
+ * The engine ids that actually exist on disk (`ENGINE_CONFIGS` in
+ * `frontend/src/services/EngineManager.ts`). Every server-side enum derives
+ * from this const so the set can never drift again.
+ *
+ * `sf18-full` was dropped (113 MB, too heavy for the public deploy) but was
+ * still accepted here, letting a client shard the position cache into a
+ * namespace no reader queries. `sf18-lite-mt` is the multi-threaded build and
+ * was missing, so MT users could neither read nor write the shared cache and
+ * could not persist it as their `defaultEngine` (data-audit §2c).
+ */
+export const ENGINE_VERSION_VALUES = ['sf18-lite', 'sf18-lite-mt', 'sf17-lite', 'sf16-lite'] as const;
+export type EngineVersionValue = (typeof ENGINE_VERSION_VALUES)[number];
+export const engineVersionSchema = z.enum(ENGINE_VERSION_VALUES);
 
 // ─────────────────────────────────────────────────────────────
 // Import
@@ -154,7 +93,7 @@ const playerReviewSchema = z.object({
 });
 
 export const gameReviewResultSchema = z.object({
-  moveReviews: z.array(moveReviewSchema),
+  moveReviews: z.array(moveReviewSchema).max(600),
   white: playerReviewSchema,
   black: playerReviewSchema,
   reviewDepth: z.number().int().min(1).max(40),
@@ -162,6 +101,18 @@ export const gameReviewResultSchema = z.object({
   reviewedAt: z.string().min(1),
   openingName: z.string().nullable(),
   ecoCode: z.string().nullable(),
+
+  // Review line identity (see CLAUDE.md "Review line identity"). These pin a
+  // saved review to the exact move-tree line it was computed on. They must be
+  // declared explicitly: this is a strip-mode `z.object`, so before they were
+  // listed here they were silently dropped on save and every reloaded review
+  // fell back to mainline-only glyph decoration — the exact bug
+  // `reviewedNodeIds` was introduced to fix (data-audit §2d).
+  // Explicit fields rather than `.passthrough()`, which would reopen the
+  // shape-drift class of bug documented in backend-audit F13.
+  reviewedNodeIds: z.array(z.string().max(64)).max(600).optional(),
+  reviewedPathKey: z.string().max(40_000).optional(),
+  reviewedLineUciKey: z.string().max(6_000).optional(),
 });
 export type GameReviewResultInput = z.infer<typeof gameReviewResultSchema>;
 
@@ -175,34 +126,3 @@ export const reviewSaveSchema = z
     message: 'Either gameId or sessionId must be provided',
   });
 export type ReviewSaveInput = z.infer<typeof reviewSaveSchema>;
-
-// ─────────────────────────────────────────────────────────────
-// Positions
-// ─────────────────────────────────────────────────────────────
-
-export const positionEvalQuerySchema = z.object({
-  fen: z.string().min(1).max(120),
-  engine: z.enum(['sf18-lite', 'sf18-full', 'sf17-lite', 'sf16-lite']).optional(),
-});
-export type PositionEvalQueryInput = z.infer<typeof positionEvalQuerySchema>;
-
-export const positionCacheSchema = z.object({
-  fen: z.string().min(1).max(120),
-  engineVersion: z.enum(['sf18-lite', 'sf18-full', 'sf17-lite', 'sf16-lite']),
-  depth: z.number().int().min(1).max(40),
-  evaluation: z.object({
-    cp: z.number().nullable().optional(),
-    mate: z.number().nullable().optional(),
-  }),
-  lines: z
-    .array(
-      z.object({
-        multipv: z.number().int().min(1).max(5),
-        cp: z.number().nullable().optional(),
-        mate: z.number().nullable().optional(),
-        pv: z.array(z.string()),
-      })
-    )
-    .max(5),
-});
-export type PositionCacheInput = z.infer<typeof positionCacheSchema>;

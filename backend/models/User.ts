@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { ENGINE_VERSION_VALUES, type EngineVersionValue } from '../zodSchemas';
 
 export interface IUser extends Document {
   email: string;
@@ -8,7 +9,7 @@ export interface IUser extends Document {
   preferences: {
     boardTheme: string;
     pieceSet: string;
-    defaultEngine: 'sf18-lite' | 'sf18-full' | 'sf17-lite' | 'sf16-lite';
+    defaultEngine: EngineVersionValue;
     defaultDepth: number;
     defaultMultiPV: 1 | 2 | 3 | 4 | 5;
     showCoordinates: boolean;
@@ -34,7 +35,7 @@ const UserSchema = new Schema<IUser>({
   preferences: {
     boardTheme:        { type: String, default: 'brown' },
     pieceSet:          { type: String, default: 'cburnett' },
-    defaultEngine:     { type: String, enum: ['sf18-lite', 'sf18-full', 'sf17-lite', 'sf16-lite'], default: 'sf18-lite' },
+    defaultEngine:     { type: String, enum: [...ENGINE_VERSION_VALUES], default: 'sf18-lite' },
     defaultDepth:      { type: Number, default: 20, min: 1, max: 30 },
     defaultMultiPV:    { type: Number, default: 1, min: 1, max: 5 },
     showCoordinates:   { type: Boolean, default: true },

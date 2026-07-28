@@ -42,10 +42,10 @@ export interface IReviewJob extends Document {
 }
 
 const ReviewJobSchema = new Schema<IReviewJob>({
-  userId:        { type: Schema.Types.ObjectId, ref: 'User', index: true, default: null },
-  gameId:        { type: Schema.Types.ObjectId, ref: 'Game', index: true, default: null },
-  clientJobId:   { type: String, required: true, index: true },
-  status:        { type: String, enum: ['queued', 'running', 'complete', 'failed', 'cancelled'], required: true, default: 'queued', index: true },
+  userId:        { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  gameId:        { type: Schema.Types.ObjectId, ref: 'Game', default: null },
+  clientJobId:   { type: String, required: true },
+  status:        { type: String, enum: ['queued', 'running', 'complete', 'failed', 'cancelled'], required: true, default: 'queued' },
   depth:         { type: Number, required: true, min: 1, max: 60 },
   engineVersion: { type: String, required: true },
   progress: {
@@ -63,7 +63,9 @@ const ReviewJobSchema = new Schema<IReviewJob>({
   finishedAt:   { type: Date, default: null },
 });
 
-ReviewJobSchema.index({ userId: 1, status: 1, updatedAt: -1 });
+// The only query against this collection is findOne({clientJobId, userId}) —
+// there is no "list my review jobs" route, so the resume key plus the TTL are
+// the whole index set (data-audit §1c).
 ReviewJobSchema.index({ clientJobId: 1, userId: 1 }, { unique: true, sparse: true });
 // 30-day TTL: job records are progress telemetry — results live on
 // Game.reviewResult / Session. Replaces the plain { updatedAt: -1 } index

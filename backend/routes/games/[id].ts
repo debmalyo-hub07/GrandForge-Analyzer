@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
-import { requireAuth, type AuthRequest } from '../../auth';
+import { requireAuth, optionalAuth, type AuthRequest } from '../../auth';
 import Game from '../../models/Game';
 
 function isValidObjectId(id: string): boolean {
@@ -15,7 +15,13 @@ function getGameId(req: AuthRequest): string | null {
 
 const app = createApp();
 
-app.get('/api/games/:id', requireAuth, async (req: AuthRequest, res) => {
+// `optionalAuth`, not `requireAuth`: POST /api/games/upload is optionalAuth, so
+// an anonymous upload created a row that nobody — including its uploader —
+// could ever read back, 401ing every /game/:id deep link (backend-audit F3).
+// The requireAuth bought nothing anyway, since the ownership check below
+// already lets any authenticated user read any ownerless game. The check is
+// unchanged: ownerless games are public, owned games are owner-only.
+app.get('/api/games/:id', optionalAuth, async (req: AuthRequest, res) => {
   const id = getGameId(req);
   if (!id || !isValidObjectId(id)) {
     return res.status(400).json({ error: 'Invalid game id' });
