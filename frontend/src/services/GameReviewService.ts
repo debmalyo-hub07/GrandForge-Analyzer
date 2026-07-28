@@ -19,6 +19,7 @@
 
 import { Chess } from 'chess.js';
 import { EngineManager, type SearchInfoLine } from './EngineManager';
+import type { EngineVersion } from '../types/engine';
 import type { IndexedGame } from './GameEngineAdapter';
 import type { MoveReview, GameReviewResult, MoveClassification } from '../types/review';
 import { ALL_CLASSIFICATIONS } from '../types/review';
@@ -36,7 +37,7 @@ import {
   MATE_SCORE_CP,
 } from '../utils/reviewUtils';
 import { lookupTablebase, tablebaseToScore, pieceCount } from './tablebase';
-import { fetchCachedEval, pushCachedEval } from './positionCache';
+import { fetchCachedEval, pushCachedEval, MAX_CACHED_PV } from './positionCache';
 
 export interface ReviewProgress {
   currentPly: number;
@@ -152,8 +153,7 @@ export class GameReviewService {
     const moveReviews: MoveReview[] = [];
     const { moveUciList, moveSanList, fenPositions, plyCount } = game;
     const startingColor = startingColorFromFen(fenPositions[0] ?? '');
-    const engineVersion = (this.engine.getVersion() ?? 'sf18-lite') as
-      'sf18-lite' | 'sf17-lite' | 'sf16-lite';
+    const engineVersion = this.engine.getVersion() ?? 'sf18-lite';
 
     this.onProgress({ currentPly: 0, totalPlies: plyCount, percent: 0, phase: 'analyzing' });
 
@@ -703,7 +703,7 @@ export function cachedLineToMoverWin(line: {
 
 async function pushFromSearchResult(
   fen: string,
-  engineVersion: 'sf18-lite' | 'sf17-lite' | 'sf16-lite',
+  engineVersion: EngineVersion,
   depth: number,
   mover: 'w' | 'b',
   top: SearchInfoLine | undefined,
@@ -727,7 +727,12 @@ async function pushFromSearchResult(
     const w = toWhiteRelative(line.cp, line.mate);
     const t: 'cp' | 'mate' = w.mate !== null ? 'mate' : 'cp';
     const v = t === 'mate' ? (w.mate as number) : (w.cp ?? 0);
-    lines.push({ multipv: line.multipv, eval: { type: t, value: v }, pv: line.pv });
+    // Truncate rather than send the full PV: `POST /api/positions/cache` bounds
+    // `pv` at MAX_CACHED_PV moves and *rejects* a longer array with 400 — and
+    // `pushCachedEval` swallows the error, so a deep search whose PV ran past
+    // the bound would silently never be cached at all. 64 plies is far more
+    // than any consumer reads (`pvLine` is sliced to 5 for display).
+    lines.push({ multipv: line.multipv, eval: { type: t, value: v }, pv: line.pv.slice(0, MAX_CACHED_PV) });
   }
 
   await pushCachedEval({

@@ -132,3 +132,39 @@ describe('gameReviewResultSchema line identity', () => {
     expect(gameReviewResultSchema.safeParse(tooManyNodes).success).toBe(false);
   });
 });
+
+// Same strip-on-save failure class as reviewedNodeIds: an undeclared field on a
+// strip-mode z.object vanishes silently, and the reloaded review then re-scores
+// engine-failed plies as genuine 0cp moves / attributes every move to the wrong
+// side. Both must survive the round-trip.
+describe('gameReviewResultSchema scoring integrity fields', () => {
+  it('round-trips startingColor in FEN spelling', () => {
+    for (const c of ['w', 'b'] as const) {
+      const parsed = gameReviewResultSchema.safeParse({ ...reviewResult('best'), startingColor: c });
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.startingColor).toBe(c);
+    }
+  });
+
+  it('rejects the long-form color spelling used elsewhere for players', () => {
+    const parsed = gameReviewResultSchema.safeParse({ ...reviewResult('best'), startingColor: 'white' });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('round-trips the per-move unscored flag', () => {
+    const input = {
+      ...reviewResult('best'),
+      moveReviews: [{ ...moveReview('good'), unscored: true }, moveReview('best')],
+    };
+    const parsed = gameReviewResultSchema.safeParse(input);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.moveReviews[0].unscored).toBe(true);
+    expect(parsed.success && parsed.data.moveReviews[1].unscored).toBeUndefined();
+  });
+
+  it('still accepts a legacy result carrying neither field', () => {
+    const parsed = gameReviewResultSchema.safeParse(reviewResult('best'));
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.startingColor).toBeUndefined();
+  });
+});

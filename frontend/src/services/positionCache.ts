@@ -15,6 +15,7 @@
 // auth so cache poisoning is gated on an account.
 
 import { apiClient, getAuthToken } from './apiClient';
+import type { EngineVersion } from '../types/engine';
 
 /**
  * Normalize a FEN to its transposition-stable form for cache keying.
@@ -101,9 +102,18 @@ export async function fetchCachedEval(
   return promise;
 }
 
+/**
+ * Longest PV the cache-write endpoint accepts per line. `POST
+ * /api/positions/cache` bounds `pv` at this length and **rejects** anything
+ * longer with a 400 that `pushCachedEval` swallows — so writers must truncate,
+ * not rely on the server to. Must equal the `.max(...)` on `pv` in
+ * `backend/routes/positions/cache.ts` (parity-tested).
+ */
+export const MAX_CACHED_PV = 64;
+
 export interface CachePayload {
   fen: string;
-  engineVersion: 'sf18-lite' | 'sf17-lite' | 'sf16-lite';
+  engineVersion: EngineVersion;
   depth: number;
   /** Side to move at this position. Stored on the cache doc so a reader can
    *  interpret the White-relative evaluation. */

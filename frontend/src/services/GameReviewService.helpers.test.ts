@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cachedLineToMoverWin, tbMoveScore } from './GameReviewService';
+import { MAX_CACHED_PV } from './positionCache';
 import { bookFensUpTo } from '../components/review/useOpeningBookFens';
 import { whiteCpAfter } from '../components/review/EvalGraph';
 import type { MoveReview } from '../types/review';
@@ -150,5 +153,22 @@ describe('whiteCpAfter', () => {
     expect(whiteCpAfter(move({ plyIndex: 0, mateAfter: 4 }), 'w')).toBe(1000);
     expect(whiteCpAfter(move({ plyIndex: 0, mateAfter: -4 }), 'w')).toBe(-1000);
     expect(whiteCpAfter(move({ plyIndex: 0, mateAfter: 4 }), 'b')).toBe(-1000);
+  });
+});
+
+// The cache-write endpoint rejects (not truncates) an over-long PV and
+// `pushCachedEval` swallows the resulting 400, so a drift between the client
+// truncation bound and the route bound silently disables caching for deep
+// searches instead of failing loudly.
+describe('MAX_CACHED_PV parity with the cache route', () => {
+  it('matches the pv bound in backend/routes/positions/cache.ts', () => {
+    const source = readFileSync(
+      join(__dirname, '../../../backend/routes/positions/cache.ts'),
+      'utf8',
+    );
+    // `\b` matters: `multipv:` also ends in `pv:` and carries its own `.max()`.
+    const match = source.match(/\bpv:\s*z\.array\([\s\S]*?\.max\((\d+)\)/);
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBe(MAX_CACHED_PV);
   });
 });

@@ -73,6 +73,13 @@ const moveReviewSchema = z.object({
   pvLine: z.array(z.string()).max(50),
   complexity: z.number().min(0).max(1).optional().default(0),
   reason: z.string().max(500).optional().default(''),
+
+  // Set when the engine produced no eval for this ply, so it must be excluded
+  // from accuracy / CPL / complexity / counts / phase scoring. Omitted (rather
+  // than `false`) on the normal path. Must be declared here or a reloaded
+  // review re-scores the ply as a genuine 0cp "Good" move — the same
+  // strip-on-save class of bug as the `reviewedNodeIds` loss below.
+  unscored: z.boolean().optional(),
 });
 
 const phaseReviewSchema = z.object({
@@ -101,6 +108,13 @@ export const gameReviewResultSchema = z.object({
   reviewedAt: z.string().min(1),
   openingName: z.string().nullable(),
   ecoCode: z.string().nullable(),
+
+  // Side to move at ply 0, derived from the starting FEN. `'w'`/`'b'` (the
+  // chess.js / FEN spelling), NOT `'white'`/`'black'` as `playerReviewSchema`
+  // uses for colors. Absent on legacy results, where consumers assume 'w'.
+  // Stripping it would flip every move to the wrong player on a review of a
+  // game that starts with black to move.
+  startingColor: z.enum(['w', 'b']).optional(),
 
   // Review line identity (see CLAUDE.md "Review line identity"). These pin a
   // saved review to the exact move-tree line it was computed on. They must be
