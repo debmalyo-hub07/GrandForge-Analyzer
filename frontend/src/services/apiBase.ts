@@ -33,17 +33,35 @@ export function resolveApiBases(raw: string | undefined): ApiBases {
 }
 
 /**
- * Failover only on failures that mean "this HOST is unreachable", never on
+ * Failover only on failures that mean "this HOST cannot serve", never on
  * application responses: a 4xx/5xx from the API itself would just repeat on
  * the fallback (same code, same DB) and duplicate non-idempotent work.
  * 502/503/504 come from the platform's proxy when the service is down/cold.
+ *
+ * The one exception is `/health`: a deploy can boot misconfigured (no
+ * MONGODB_URI, bad secret) and 5xx every request while the platform proxy
+ * still reports the host as up, so no gateway status is ever produced. A 5xx
+ * from the health endpoint means the whole deploy is broken — replaying it on
+ * the fallback duplicates no work, and without this the client would stick to
+ * a primary where nothing succeeds (backend-audit F14).
  */
 export function isFailoverEligible(
-  error: { response?: { status?: number } } | null | undefined
+  error:
+    | { response?: { status?: number }; config?: { url?: string } }
+    | null
+    | undefined
 ): boolean {
   const status = error?.response?.status;
   if (typeof status !== 'number') return true; // network error / timeout / CORS
-  return status === 502 || status === 503 || status === 504;
+  if (status === 502 || status === 503 || status === 504) return true;
+  return status >= 500 && isHealthUrl(error?.config?.url);
+}
+
+/** True for the health endpoint on a relative (`/health`) or absolute URL. */
+function isHealthUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  const path = url.split(/[?#]/)[0].replace(/\/+$/, '');
+  return path === 'health' || path.endsWith('/health');
 }
 
 // ── Sticky runtime state ────────────────────────────────────────────────────

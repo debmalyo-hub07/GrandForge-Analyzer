@@ -52,4 +52,37 @@ describe('isFailoverEligible', () => {
       expect(isFailoverEligible({ response: { status } })).toBe(false);
     }
   });
+
+  // backend-audit F14: a deploy that boots without MONGODB_URI answers /health
+  // with a 500 while the proxy stays green. Without this branch the client
+  // sticks to a primary where every request fails.
+  it('is true for a 5xx on /health — the host is up but the deploy is broken', () => {
+    expect(
+      isFailoverEligible({ response: { status: 500 }, config: { url: 'https://x/api/health' } })
+    ).toBe(true);
+    expect(isFailoverEligible({ response: { status: 500 }, config: { url: '/health' } })).toBe(true);
+    expect(isFailoverEligible({ response: { status: 503 }, config: { url: '/health' } })).toBe(true);
+    expect(
+      isFailoverEligible({ response: { status: 500 }, config: { url: '/health?probe=1' } })
+    ).toBe(true);
+  });
+
+  it('keeps a plain 500 on a non-health URL non-eligible', () => {
+    expect(
+      isFailoverEligible({ response: { status: 500 }, config: { url: '/games/upload' } })
+    ).toBe(false);
+    // Not a health endpoint despite the substring.
+    expect(
+      isFailoverEligible({ response: { status: 500 }, config: { url: '/positions/healthcheck' } })
+    ).toBe(false);
+  });
+
+  it('keeps 4xx on /health non-eligible — the deploy answered, it is not a host outage', () => {
+    expect(isFailoverEligible({ response: { status: 404 }, config: { url: '/health' } })).toBe(
+      false
+    );
+    expect(isFailoverEligible({ response: { status: 429 }, config: { url: '/health' } })).toBe(
+      false
+    );
+  });
 });
