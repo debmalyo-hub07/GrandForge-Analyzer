@@ -2,7 +2,9 @@
  * GrandForge — ECO Opening Database Seeder
  *
  * Seeds the `openings` collection from the Lichess open-source ECO TSV files.
- * Source: https://github.com/lichess-org/chess-openings (AGPL-3.0)
+ * Source: https://github.com/lichess-org/chess-openings (CC0-1.0 — public domain
+ * dedication; verified 2026-07-28 against the upstream README and repo metadata.
+ * No attribution obligation attaches to this data.)
  *
  * Run: npx tsx scripts/seedOpenings.ts
  */

@@ -1,7 +1,11 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: ['./index.html', './src/**/*.{ts,tsx,html}'],
+  // Paths are relative to the repo root (where this config lives), NOT to Vite's
+  // `root` of frontend/. The dda9c75 frontend//backend/ split moved index.html and
+  // src/ under frontend/; leaving the old root-relative globs made Tailwind scan
+  // nothing and emit zero utilities into the production CSS.
+  content: ['./frontend/index.html', './frontend/src/**/*.{ts,tsx,html}'],
   darkMode: 'class',
   theme: {
     extend: {

@@ -1,0 +1,58 @@
+Stockfish WASM builds served by GrandForge — corresponding source
+=================================================================
+
+GrandForge conveys the GPL-3.0 licensed Stockfish builds listed below to every
+visitor of this site. They are redistributed byte-for-byte unmodified; GrandForge
+applies no patches to the engine. This file identifies the exact upstream source
+for each shipped artifact, satisfying the GPL-3.0 §6 offer of corresponding
+source. The full license text is in ./Copying.txt and authorship is in
+./AUTHORS.txt.
+
+Engine builds
+-------------
+
+stockfish-18-lite.js
+stockfish-18-lite.wasm
+stockfish-18-lite-single.js
+stockfish-18-lite-single.wasm
+    Stockfish.js 18 — npm package `stockfish@18.0.7`
+    Source repository: https://github.com/nmrugg/stockfish.js
+    Package:           https://www.npmjs.com/package/stockfish/v/18.0.7
+    These four files are copied verbatim from `node_modules/stockfish/bin/` at
+    build time by `scripts/copyStockfish.mjs`. The `-single` pair is the
+    single-threaded build; the other pair is the multi-threaded build.
+
+stockfish-17.1-lite-single.js
+stockfish-17.1-lite-single.wasm
+    Stockfish.js 17.1 lite (single-threaded) build.
+    Source repository: https://github.com/nmrugg/stockfish.js
+    Release:           https://github.com/nmrugg/stockfish.js/releases (tag 17.1)
+
+stockfish-16-lite-single.js
+stockfish-16-lite-single.wasm
+    Stockfish.js 16 lite (single-threaded) build.
+    Source repository: https://github.com/nmrugg/stockfish.js
+    Release:           https://github.com/nmrugg/stockfish.js/releases (tag 16)
+
+Stockfish.js is itself a WebAssembly port of Stockfish, whose source is at
+https://github.com/official-stockfish/Stockfish.
+
+NNUE evaluation network
+-----------------------
+
+nn-5af11540bbfe.nnue
+    Official Stockfish NNUE network for Stockfish 16, fetched at runtime by the
+    sf16 lite build (that build keeps its net external, which is why the file
+    must ship; the 17.1 and 18 builds have their net embedded in the .wasm).
+    Networks: https://github.com/official-stockfish/networks
+    https://tests.stockfishchess.org/nns
+
+Notes
+-----
+
+The `stockfish@18.0.7` npm package also contains a ~113 MB full (non-lite) build.
+GrandForge does not deploy it, so no obligation attaches to it here; it is
+available from the same npm package and repository listed above.
+
+GrandForge's own application code communicates with these engines only over the
+UCI protocol across a Web Worker `postMessage` boundary.

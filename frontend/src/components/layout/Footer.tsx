@@ -7,7 +7,11 @@ export function Footer() {
       <span>
         GrandForge · Powered by{' '}
         <a href="https://stockfishchess.org" target="_blank" rel="noopener noreferrer">Stockfish 18</a>
-        {' '}(GPLv3) — Analysis runs in your browser.
+        {' · '}
+        GPL-3.0 · <a href="/stockfish/Copying.txt" target="_blank" rel="noopener noreferrer">license</a>
+        {' · '}
+        <a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noopener noreferrer">engine source</a>
+        {' '}— Analysis runs in your browser.
       </span>
       <span className="app-footer-links">
         <Link to="/learn/chess-accuracy">Accuracy</Link>

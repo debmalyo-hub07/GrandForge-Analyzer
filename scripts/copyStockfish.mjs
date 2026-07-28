@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, existsSync, statSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, statSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 // The `stockfish` npm package ships builds in `bin/` (not `src/` as older docs suggest).
@@ -61,6 +61,57 @@ if (missingReal.length > 0) {
     `⚠ GrandForge: missing real engine binaries in public/stockfish/: ${missingReal.join(', ')}.\n` +
     `  The sf16/sf17 UI options will 404 until these are added.`
   );
+}
+
+// GPL-3.0 §4/§6 compliance: we convey four GPL'd Stockfish builds to every visitor,
+// so the full license text and an authors pointer must ship alongside them. The npm
+// package carries Copying.txt (the GPLv3 text) but no AUTHORS file, so that one is
+// generated here as a pointer to the upstream author lists. SOURCE.txt (the
+// corresponding-source provenance per binary) is committed by hand, not generated.
+const licenseSrc = resolve('node_modules/stockfish/Copying.txt');
+const licenseDst = resolve(destDir, 'Copying.txt');
+if (existsSync(licenseSrc)) {
+  let needCopy = true;
+  try {
+    if (existsSync(licenseDst) && statSync(licenseDst).size === statSync(licenseSrc).size) {
+      needCopy = false;
+    }
+  } catch {}
+  if (needCopy) copyFileSync(licenseSrc, licenseDst);
+} else {
+  console.warn(
+    `⚠ GrandForge: ${licenseSrc} not found — GPL-3.0 license text will not ship with the engines.`
+  );
+}
+
+const AUTHORS_TEXT = `Stockfish WASM builds served by GrandForge — authorship
+=======================================================
+
+The engine binaries under /stockfish/ are third-party GPL-3.0 works. GrandForge
+redistributes them unmodified and claims no authorship over them.
+
+Stockfish (the chess engine)
+  Tord Romstad, Marco Costalba, Joona Kiiski, Gary Linscott and the Stockfish
+  contributors. Full, current author list:
+  https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS
+
+Stockfish.js (the WebAssembly ports shipped here)
+  Nathan Rugg (nmrugg) and Chess.com, LLC, based on stockfish.wasm by
+  Niklas Fiekas and Hiroshi Ogawa.
+  https://github.com/nmrugg/stockfish.js
+
+NNUE evaluation networks
+  Trained and maintained by the Stockfish project (nets by Linmiao Xu / linrock
+  and contributors).
+  https://github.com/official-stockfish/networks
+
+License: GNU General Public License v3 — full text in ./Copying.txt
+Corresponding source provenance per shipped file: ./SOURCE.txt
+`;
+
+const authorsDst = resolve(destDir, 'AUTHORS.txt');
+if (!existsSync(authorsDst) || readFileSync(authorsDst, 'utf8') !== AUTHORS_TEXT) {
+  writeFileSync(authorsDst, AUTHORS_TEXT, 'utf8');
 }
 
 console.log(
