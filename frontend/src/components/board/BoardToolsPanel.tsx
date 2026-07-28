@@ -166,7 +166,7 @@ export function BoardToolsPanel({ onClose }: BoardToolsPanelProps) {
 
         <div className="tools-toggles flex flex-col gap-1">
           <Toggle
-            label="Inline notation"
+            label="Coordinates"
             checked={showCoordinates}
             onChange={setShowCoordinates}
           />

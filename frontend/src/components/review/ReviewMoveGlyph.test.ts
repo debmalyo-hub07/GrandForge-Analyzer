@@ -29,6 +29,7 @@ const playerReview: PlayerReview = {
     brilliant: 0,
     great: 1,
     book: 0,
+    forced: 0,
     best: 0,
     excellent: 0,
     good: 0,

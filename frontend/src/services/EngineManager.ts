@@ -22,7 +22,7 @@ export const ENGINE_CONFIGS: Record<EngineVersion, EngineConfigEntry> = {
   // cross-origin isolation (COOP/COEP), else the worker falls back to 1 thread.
   'sf18-lite-mt': { id: 'sf18-lite-mt', label: 'Stockfish 18 (Lite, Multi-threaded)', file: 'stockfish-18-lite.js',   sizeMB: 7,   description: 'Lite build using multiple CPU threads', multiThreaded: true },
   'sf17-lite':    { id: 'sf17-lite',    label: 'Stockfish 17.1 (Lite)',       file: 'stockfish-17.1-lite-single.js', sizeMB: 7,   description: 'Previous generation for comparison' },
-  'sf16-lite':    { id: 'sf16-lite',    label: 'Stockfish 16',                file: 'stockfish-16-lite-single.js',   sizeMB: 1,   description: 'Classic NNUE engine for comparison' },
+  'sf16-lite':    { id: 'sf16-lite',    label: 'Stockfish 16',                file: 'stockfish-16-lite-single.js',   sizeMB: 40,  description: 'Classic NNUE engine for comparison' },
 };
 
 /** Whether the given engine version is a multi-threaded build. Used to decide

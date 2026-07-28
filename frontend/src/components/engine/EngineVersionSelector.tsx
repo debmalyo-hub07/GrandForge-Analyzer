@@ -8,6 +8,7 @@ import {
 
 const ENGINE_ORDER: EngineVersion[] = [
   'sf18-lite',
+  'sf18-lite-mt',
   'sf17-lite',
   'sf16-lite',
 ];

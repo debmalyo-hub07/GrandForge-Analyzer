@@ -106,6 +106,7 @@ const moveClassificationSchema = z.enum([
   'brilliant',
   'great',
   'book',
+  'forced',
   'best',
   'excellent',
   'good',

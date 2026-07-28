@@ -21,6 +21,7 @@ import { Chess } from 'chess.js';
 import { EngineManager, type SearchInfoLine } from './EngineManager';
 import type { IndexedGame } from './GameEngineAdapter';
 import type { MoveReview, GameReviewResult, MoveClassification } from '../types/review';
+import { ALL_CLASSIFICATIONS } from '../types/review';
 import {
   accuracyToGameRating,
   classifyMove,
@@ -396,6 +397,15 @@ export class GameReviewService {
         const isMaterialSacrifice =
           !!fenAfter && isTruePieceSacrifice(fenBefore, fenAfter);
 
+        // Forced: exactly one legal move in the pre-move position. chess.js
+        // move generation is cheap (~µs) next to an engine search.
+        let isForced = false;
+        try {
+          isForced = new Chess(fenBefore).moves().length === 1;
+        } catch {
+          // Unparseable FEN — leave unforced; the ply is already unscored.
+        }
+
         // Exact best-move check — the near_best threshold in classifyMove
         // already handles engine-equivalent tolerance (0.5% ΔWin).
         const isBestMove = bestMoveUci === playedUci;
@@ -410,6 +420,7 @@ export class GameReviewService {
           isSingularChoice,
           isMaterialSacrifice,
           deltaWin,
+          isForced,
           mateBefore: normalizedMateBefore,
           mateAfter: normalizedMateAfter,
           playerRating,
@@ -508,8 +519,7 @@ export class GameReviewService {
       // output is byte-identical to the pre-REV-4 behavior.
       const scored = moves.filter((m) => !unscoredPlies.has(m.plyIndex));
       const counts = Object.fromEntries(
-        ['brilliant', 'great', 'book', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'miss', 'blunder']
-          .map((k) => [k, scored.filter((m) => m.classification === k).length]),
+        ALL_CLASSIFICATIONS.map((k) => [k, scored.filter((m) => m.classification === k).length]),
       ) as Record<MoveClassification, number>;
 
       const acc = playerAccuracy(moveReviews, color, startingColor, unscoredPlies);

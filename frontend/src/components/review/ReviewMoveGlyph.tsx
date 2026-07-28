@@ -31,6 +31,7 @@ const GLYPH: Record<MoveClassification, string> = {
   brilliant: '!!',
   great: '!',
   book: '📖',
+  forced: '→',
   best: '★',
   excellent: '👍',
   good: '✓',
@@ -41,6 +42,7 @@ const GLYPH: Record<MoveClassification, string> = {
 };
 
 const GLYPH_COLOR: Record<MoveClassification, string> = {
+  forced: '#a88850',
   brilliant: '#1baca6',
   great: '#5c8bb0',
   book: '#c8a84b',

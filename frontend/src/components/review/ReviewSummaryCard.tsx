@@ -10,8 +10,11 @@ const CLASSIFICATION_CONFIG: Record<
   brilliant:  { label: 'Brilliant',  icon: '!!', color: '#1baca6' },
   great:      { label: 'Great',      icon: '!',  color: '#5c8bb0' },
   book:       { label: 'Book',       icon: '📖', color: '#c8a84b' },
+  forced:     { label: 'Forced',     icon: '→',  color: '#a88850' },
   best:       { label: 'Best',       icon: '★', color: '#96bc4b' },
-  excellent:  { label: 'Excellent',  icon: '👍', color: '#96bc4b' },
+  // Excellent shares the green family but a distinct tint so it no longer
+  // collides with Best's #96bc4b.
+  excellent:  { label: 'Excellent',  icon: '👍', color: '#a3d35f' },
   good:       { label: 'Good',       icon: '✔', color: '#82ac49' },
   inaccuracy: { label: 'Inaccuracy', icon: '?!', color: '#f0c945' },
   mistake:    { label: 'Mistake',    icon: '?',  color: '#e68f39' },

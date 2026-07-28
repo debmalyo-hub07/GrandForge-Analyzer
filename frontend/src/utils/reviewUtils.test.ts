@@ -28,6 +28,52 @@ const baseMove = (overrides: Partial<MoveReview> = {}): MoveReview => ({
   ...overrides,
 });
 
+describe('classifyMove forced moves', () => {
+  it('classifies the only legal move as forced regardless of outcome', () => {
+    const classification = classifyMove({
+      winBefore: 0.3,
+      winAfter: 0.1,
+      isBookMove: false,
+      isBestMove: true,
+      isSingularChoice: false,
+      isMaterialSacrifice: false,
+      deltaWin: 0.2,
+      isForced: true,
+    });
+
+    expect(classification).toBe('forced');
+  });
+
+  it('book beats forced when both apply', () => {
+    const classification = classifyMove({
+      winBefore: 0.5,
+      winAfter: 0.5,
+      isBookMove: true,
+      isBestMove: true,
+      isSingularChoice: false,
+      isMaterialSacrifice: false,
+      deltaWin: 0,
+      isForced: true,
+    });
+
+    expect(classification).toBe('book');
+  });
+
+  it('does not mark moves forced when isForced is absent', () => {
+    const classification = classifyMove({
+      winBefore: 0.5,
+      winAfter: 0.5,
+      isBookMove: false,
+      isBestMove: true,
+      isSingularChoice: false,
+      isMaterialSacrifice: false,
+      deltaWin: 0,
+    });
+
+    expect(classification).toBe('best');
+  });
+});
+
 describe('classifyMove rating-aware special classifications', () => {
   it('allows a strong practical sacrifice to be brilliant for club-level players', () => {
     const classification = classifyMove({
@@ -112,5 +158,13 @@ describe('phaseSummary', () => {
     expect(summary.avgCpl).toBe(35);
     expect(summary.accuracy).toBeGreaterThan(80);
     expect(summary.icon).toBe('excellent');
+  });
+});
+
+describe('classification parity', () => {
+  it('ALL_CLASSIFICATIONS has 11 members including forced', async () => {
+    const { ALL_CLASSIFICATIONS } = await import('../types/review');
+    expect(ALL_CLASSIFICATIONS).toHaveLength(11);
+    expect(ALL_CLASSIFICATIONS).toContain('forced');
   });
 });

@@ -159,7 +159,9 @@ export function playerAccuracy(
       ? (isMoverWhite ? m.mateBefore : -m.mateBefore)
       : null;
     colorSeries.push(cpAndMateToWin(whiteRelativeCp, whiteRelativeMate) * 100);
-    if (m.isBookMove) continue;
+    // Book and forced moves carry no decision — exclude from the accuracy
+    // series (they still feed the Win% volatility window above).
+    if (m.isBookMove || m.classification === 'forced') continue;
     // Anchor on the just-pushed entry (index = colorSeries.length - 1).
     anchorIdx.push(colorSeries.length - 1);
     const wBefore = cpAndMateToWin(m.evalBefore, m.mateBefore) * 100;
@@ -202,19 +204,28 @@ export function playerAccuracy(
 // ════════════════════════════════════════════════════════════════════════════
 // PHASE 4 — CLASSIFICATION (USER SPEC)
 //
+// Short-circuits first: Book (position in the ECO opening set), then Forced
+// (only legal move — labelled, never rated).
+//
 // Standard ladder uses ΔWin in 0..1 scale:
-//   Best        : 0.00 drop
-//   Excellent   : > 0.00, ≤ 0.02
-//   Good        : > 0.02, ≤ 0.05
-//   Inaccuracy  : > 0.05, ≤ 0.10
-//   Mistake     : > 0.10, ≤ 0.20
+//   Best        : ≤ 0.005 drop ("near_best") OR the exact engine top move
+//   Excellent   : > 0.005, ≤ 0.02
+//   Good        : > 0.02,  ≤ 0.05
+//   Inaccuracy  : > 0.05,  ≤ 0.10
+//   Mistake     : > 0.10,  ≤ 0.20
 //   Blunder     : > 0.20
 //
 // Special overrides (winBefore/winAfter in 0..1). Values below MUST match the
 // constants declared just under this block — keep them in sync:
-//   Miss        : winBefore > 0.85 AND winAfter < 0.60 (unless ΔWin > 0.20 → blunder)
-//   Great       : winBefore < 0.20 AND winAfter > 0.40 AND singular engine choice
-//   Brilliant   : true piece sacrifice AND winAfter >= 0.60 AND winBefore < 0.85
+//   Miss      : winBefore > 0.85 AND winAfter < 0.60 — 'miss' while the player
+//               still keeps footing (winAfter ≥ 0.35), 'blunder' on a collapse
+//               below that. (ΔWin is always > 0.25 in this region, so a plain
+//               ΔWin>0.20 promotion would make 'miss' unreachable.)
+//   Great     : singular engine choice + rating-calibrated near-best play +
+//               one of three swing gates (losing→winning, equal→winning,
+//               lost→equal) — see the C1 block below.
+//   Brilliant : engine-equivalent true piece sacrifice AND winAfter ≥ 0.60
+//               AND winBefore < 0.85, drop limit calibrated by player rating.
 //
 // "near_best" tolerance band of 0.005 ΔWin keeps Best stable across
 // shallow-depth engine nondeterminism — same position can flip top-PV
@@ -278,6 +289,8 @@ export interface ClassifyMoveParams {
   isSingularChoice: boolean;
   isMaterialSacrifice: boolean;
   deltaWin: number;
+  /** Only legal move in the position — labelled 'forced', never rated. */
+  isForced?: boolean;
   /** Mate-in-N before the move (mover-positive). null = no forced mate. */
   mateBefore?: number | null;
   /** Mate-in-N after the move (new-mover-positive). null = no forced mate. */
@@ -295,12 +308,16 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
     isSingularChoice,
     isMaterialSacrifice,
     deltaWin,
+    isForced = false,
     mateBefore = null,
     mateAfter = null,
     playerRating = DEFAULT_PLAYER_RATING,
   } = params;
 
   if (isBookMove) return 'book';
+  // Forced: with a single legal move there was no decision to grade. Runs
+  // before every override so a forced recapture can't score as Best/Blunder.
+  if (isForced) return 'forced';
 
   const dw = deltaWin;
 
@@ -356,9 +373,12 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
   }
 
   if (winBefore > MISS_WIN_BEFORE && winAfter < MISS_WIN_AFTER) {
-    // If the Win% drop is severe enough to be a blunder, classify as blunder.
-    // "Miss" is for losing a winning advantage, not for catastrophic collapses.
-    if (dw > DELTA_WIN_THRESHOLDS.mistake) return 'blunder';
+    // "Miss" is for letting a winning advantage slip while keeping footing;
+    // a collapse into a (near-)lost position is a blunder. NOTE: ΔWin is
+    // always > 0.25 in this region (0.85 − 0.60), so gating the promotion on
+    // ΔWin > 0.20 — the previous code — made 'miss' unreachable here; the
+    // discriminator must be the RESULTING position, not the drop size.
+    if (winAfter < 0.35) return 'blunder';
     return 'miss';
   }
 
@@ -388,9 +408,9 @@ export function accuracyToGameRating(
   avgComplexity?: number,
 ): number | null {
   const moves = Math.max(0, moveCount ?? 0);
-  // Below 5 moves there isn't enough signal to estimate performance — return
-  // null so callers can suppress the badge instead of showing a misleading
-  // blended-to-1200 number.
+  // Below 3 rated moves there isn't enough signal to estimate performance —
+  // return null so callers can suppress the badge instead of showing a
+  // misleading blended-to-1200 number (3–4 moves render as 'provisional').
   if (moves < 3) return null;
 
   const a = Math.max(0, Math.min(100, accuracy));
@@ -461,7 +481,7 @@ export function phaseSummary(phaseMoves: MoveReview[]): {
   moveCount: number;
   avgCpl: number | null;
 } {
-  const rated = phaseMoves.filter((m) => !m.isBookMove);
+  const rated = phaseMoves.filter((m) => !m.isBookMove && m.classification !== 'forced');
   if (rated.length === 0) {
     return { accuracy: 0, icon: 'none', moveCount: 0, avgCpl: null };
   }

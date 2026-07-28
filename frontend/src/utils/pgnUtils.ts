@@ -13,6 +13,7 @@ const NAG_BY_CLASSIFICATION: Record<MoveClassification, string> = {
   excellent:  '$1',
   good:       '',
   book:       '',
+  forced:     '',
   inaccuracy: '$6',
   mistake:    '$2',
   miss:       '$2',

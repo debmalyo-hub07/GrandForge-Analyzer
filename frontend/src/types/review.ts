@@ -1,14 +1,36 @@
+// Classification is ΔWin-based (win-percent loss, see reviewUtils.ts
+// DELTA_WIN_THRESHOLDS): best ≤0.005 (or engine top move) · excellent ≤0.02 ·
+// good ≤0.05 · inaccuracy ≤0.10 · mistake ≤0.20 · blunder >0.20, with
+// brilliant/great/miss overrides and book/forced short-circuits.
 export type MoveClassification =
-  | 'brilliant'    // !! — best move AND a sacrifice/quiet move found by engine, CPL ≤ 0
-  | 'great'        // !  — best move (top engine choice), CPL ≤ 0
-  | 'book'         // 📖 — a known opening theory move
-  | 'best'         // ★  — best move, CPL ≤ 5
-  | 'excellent'    // 👍 — very good move, CPL ≤ 15
-  | 'good'         // ✓  — good move, CPL ≤ 30
-  | 'inaccuracy'   // ?! — inaccuracy, CPL 31–90
-  | 'mistake'      // ?  — mistake, CPL 91–200
-  | 'miss'         // ✗  — missed a forced win (engine had M# but player didn't play it)
-  | 'blunder';     // ?? — blunder, CPL > 200 or drops mating combination
+  | 'brilliant'    // !! — engine-equivalent true piece sacrifice from a non-won position
+  | 'great'        // !  — singular engine choice producing a decisive swing
+  | 'book'         // 📖 — known opening theory move (ECO DB)
+  | 'forced'       // →  — only legal move; not rated for accuracy
+  | 'best'         // ★  — engine top choice or within 0.005 ΔWin
+  | 'excellent'    // 👍 — ΔWin ≤ 0.02
+  | 'good'         // ✓  — ΔWin ≤ 0.05
+  | 'inaccuracy'   // ?! — ΔWin ≤ 0.10
+  | 'mistake'      // ?  — ΔWin ≤ 0.20
+  | 'miss'         // ✗  — winning chance squandered (mate dropped / big advantage let slip)
+  | 'blunder';     // ?? — ΔWin > 0.20 or collapse into a lost position
+
+/**
+ * Canonical order for iterating every classification (summary rows, counts).
+ * The AssertExhaustive check makes adding a union member without listing it
+ * here a compile error — GameReviewService builds its per-player `counts`
+ * record from this array.
+ */
+export const ALL_CLASSIFICATIONS = [
+  'brilliant', 'great', 'book', 'forced', 'best', 'excellent',
+  'good', 'inaccuracy', 'mistake', 'miss', 'blunder',
+] as const satisfies readonly MoveClassification[];
+
+type AssertExhaustive<T extends never> = T;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _AllClassificationsCovered = AssertExhaustive<
+  Exclude<MoveClassification, (typeof ALL_CLASSIFICATIONS)[number]>
+>;
 
 // Centipawn-loss reference thresholds (legacy). Newer review code uses
 // win-percent loss for classification; these are retained for reporting.
@@ -55,7 +77,7 @@ export interface PlayerReview {
   color: 'white' | 'black';
   accuracy: number;            // 0–100, computed via accuracy formula
   counts: Record<MoveClassification, number>;
-  /** Estimated performance rating, or null when too few moves to estimate (<5). */
+  /** Estimated performance rating, or null when too few moves to estimate (<3). */
   gameRating: number | null;
   gameRatingConfidence: RatingConfidence;
   phaseReviews: PhaseReview[];
