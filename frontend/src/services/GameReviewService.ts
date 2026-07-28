@@ -30,6 +30,7 @@ import {
   engineScoreToCentipawns,
   isTruePieceSacrifice,
   gameRatingConfidence,
+  isRatedMove,
   phaseSummary,
   playerAccuracy,
   MATE_SCORE_CP,
@@ -173,15 +174,19 @@ export class GameReviewService {
           const win = cpAndMateToWin(score.cp, score.mate);
           // Best move from tablebase: lowest dtz/dtm winning move (when winning),
           // or any drawing move (when drawing). Lichess returns moves sorted.
+          // Per-move category/dtm are reported from the REPLIER's perspective —
+          // normalise every one of them to the mover's before use (F3).
           const best = tb.moves[0];
           const second = tb.moves[1];
-          const bestWin = best ? cpAndMateToWin(tbMoveScore(best.category, best.dtm).cp, tbMoveScore(best.category, best.dtm).mate) : win;
-          const secondWin = second
-            ? cpAndMateToWin(tbMoveScore(second.category, second.dtm).cp, tbMoveScore(second.category, second.dtm).mate)
+          const bestScore = best ? tbMoveScore(best.category, best.dtm) : null;
+          const secondScore = second ? tbMoveScore(second.category, second.dtm) : null;
+          const bestWin = bestScore ? cpAndMateToWin(bestScore.cp, bestScore.mate) : win;
+          const secondWin = secondScore
+            ? cpAndMateToWin(secondScore.cp, secondScore.mate)
             : null;
           const tbMoves = new Map<string, { category: string; dtm: number | null }>();
           for (const m of tb.moves) {
-            tbMoves.set(m.uci, { category: m.category, dtm: m.dtm });
+            tbMoves.set(m.uci, tbMoveToMoverPerspective(m.category, m.dtm));
           }
           const entry: PlySearch = {
             cp: score.cp,
@@ -193,8 +198,9 @@ export class GameReviewService {
             bestMoveUci: best?.uci ?? '',
             source: 'tablebase',
             tbMoves,
-            tbBest: best ? { category: best.category, dtm: best.dtm } : undefined,
+            tbBest: best ? tbMoveToMoverPerspective(best.category, best.dtm) : undefined,
           };
+
           searchAtPly[plyIdx] = entry;
           return entry;
         }
@@ -393,9 +399,10 @@ export class GameReviewService {
           before.secondMoveWin !== null &&
           before.topMoveWin - before.secondMoveWin > 0.05;
 
-        // True piece-sacrifice detector based on aggregate material change.
-        const isMaterialSacrifice =
-          !!fenAfter && isTruePieceSacrifice(fenBefore, fenAfter);
+        // True piece-sacrifice detector: static exchange evaluation on the
+        // move's destination square (the sacrifice only lands on the reply, so
+        // this cannot be measured from the two FENs alone — see F1).
+        const isMaterialSacrifice = isTruePieceSacrifice(fenBefore, playedUci);
 
         // Forced: exactly one legal move in the pre-move position. chess.js
         // move generation is cheap (~µs) next to an engine search.
@@ -409,7 +416,6 @@ export class GameReviewService {
         // Exact best-move check — the near_best threshold in classifyMove
         // already handles engine-equivalent tolerance (0.5% ΔWin).
         const isBestMove = bestMoveUci === playedUci;
-        const deltaWin = Math.max(0, winBefore - winAfter);
         const playerRating = ratingFromMetadata(game, moverFromFen(fenBefore));
 
         let classification = classifyMove({
@@ -419,7 +425,6 @@ export class GameReviewService {
           isBestMove,
           isSingularChoice,
           isMaterialSacrifice,
-          deltaWin,
           isForced,
           mateBefore: normalizedMateBefore,
           mateAfter: normalizedMateAfter,
@@ -429,19 +434,21 @@ export class GameReviewService {
         // C6: Tablebase slow-win — when both played and best are 'win' category
         // but the played move is much slower (or worse, drops to draw/loss),
         // upgrade the classification severity. ΔWin alone won't catch this
-        // because both are clamped to 1.0.
-        if (before.source === 'tablebase' && before.tbMoves && before.tbBest && !isBookMove) {
+        // because both are clamped to 1.0. `tbMoves`/`tbBest` are already
+        // mover-relative (see tbMoveToMoverPerspective). Forced plies are
+        // exempt — with one legal move there was nothing to get wrong.
+        if (before.source === 'tablebase' && before.tbMoves && before.tbBest && !isBookMove && !isForced) {
           const playedTb = before.tbMoves.get(playedUci);
           const bestTb = before.tbBest;
           if (playedTb) {
-            const wasWin = bestTb.category === 'win';
+            const wasWin = bestTb.category === 'win' || bestTb.category === 'syzygy-win';
             if (wasWin) {
-              if (playedTb.category === 'loss') {
+              if (playedTb.category === 'loss' || playedTb.category === 'syzygy-loss') {
                 classification = 'blunder';
               } else if (playedTb.category === 'draw' || playedTb.category === 'cursed-win' || playedTb.category === 'blessed-loss') {
                 classification = 'miss';
               } else if (
-                playedTb.category === 'win' &&
+                (playedTb.category === 'win' || playedTb.category === 'syzygy-win') &&
                 playedTb.dtm !== null &&
                 bestTb.dtm !== null &&
                 Math.abs(playedTb.dtm) > Math.abs(bestTb.dtm) + 10
@@ -492,6 +499,7 @@ export class GameReviewService {
               ? 0
               : Math.max(0, before.topMoveWin - before.secondMoveWin),
           reason,
+          unscored: isPlyUnscored || undefined,
         });
 
         this.onProgress({
@@ -507,9 +515,12 @@ export class GameReviewService {
       throw err;
     }
 
-    const moverIsWhite = (i: number) => (startingColor === 'w' ? i % 2 === 0 : i % 2 !== 0);
-    const whiteMoves = moveReviews.filter((_, i) => moverIsWhite(i));
-    const blackMoves = moveReviews.filter((_, i) => !moverIsWhite(i));
+    // Attribute each ply to a colour by its plyIndex, not by its position in
+    // the array — the two only agree while moveReviews is dense.
+    const moverIsWhite = (plyIndex: number) =>
+      startingColor === 'w' ? plyIndex % 2 === 0 : plyIndex % 2 !== 0;
+    const whiteMoves = moveReviews.filter((m) => moverIsWhite(m.plyIndex));
+    const blackMoves = moveReviews.filter((m) => !moverIsWhite(m.plyIndex));
 
     const { openingEndsAtPly, middlegameEndsAtPly } = computePhaseBoundaries(game.fenPositions);
 
@@ -523,7 +534,10 @@ export class GameReviewService {
       ) as Record<MoveClassification, number>;
 
       const acc = playerAccuracy(moveReviews, color, startingColor, unscoredPlies);
-      const ratedMoves = scored.filter((m) => !m.isBookMove);
+      // F7: one shared predicate with playerAccuracy / phaseSummary. Forced
+      // plies used to land in here and drag avgCpl, avgComplexity and the
+      // rating's move-count denominator with them.
+      const ratedMoves = scored.filter(isRatedMove);
       const avgCpl = ratedMoves.length > 0
         ? Math.round(ratedMoves.reduce((sum, m) => sum + Math.min(m.cpl, 1500), 0) / ratedMoves.length)
         : 0;
@@ -575,6 +589,10 @@ export class GameReviewService {
       reviewedAt: new Date().toISOString(),
       openingName: (game.metadata?.opening as string) ?? null,
       ecoCode: (game.metadata?.ecoCode as string) ?? null,
+      // Side to move at ply 0 — without it every consumer has to assume White
+      // started, which sign-flips the whole eval graph for a game imported from
+      // a black-to-move FEN (F11).
+      startingColor,
       // Pin the result to the exact line it was computed on, so playback /
       // glyphs / arrows follow the reviewed line instead of the mainline.
       reviewedNodeIds: game.reviewedNodeIds,
@@ -608,16 +626,67 @@ export class GameReviewService {
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function tbMoveScore(category: string, dtm: number | null): { cp: number | null; mate: number | null } {
-  const dtmAbs = dtm !== null ? Math.max(1, Math.abs(dtm)) : 50;
-  switch (category) {
-    case 'win': return { cp: null, mate: dtmAbs };
-    case 'loss': return { cp: null, mate: -dtmAbs };
-    default: return { cp: 0, mate: null };
+/**
+ * Flip one entry of `TablebaseResult.moves[]` to the perspective of the side
+ * that PLAYS the move.
+ *
+ * F3 (2026-07-29): the lichess tablebase reports the top-level `category`/`dtm`
+ * relative to the side to move, but each per-move `category`/`dtm` relative to
+ * the side to move AFTER that move — i.e. the opponent. For
+ * `4k3/6KP/8/8/8/8/8/8 w - -` (won for White, DTM 15) the API returns
+ * `moves[0] = { uci: "h7h8q", category: "loss", dtm: -14 }`: a loss for Black.
+ *
+ * Reading those raw made `topMoveWin`/`secondMoveWin` collapse to 0.0 in every
+ * won endgame (and 1.0 in every lost one), which in turn made `isSingularChoice`
+ * and `complexity` permanently 0 for tablebase plies and left the whole C6
+ * slow-win override dead. Normalising here keeps every downstream consumer on
+ * one convention.
+ */
+const TB_CATEGORY_MIRROR: Record<string, string> = {
+  win: 'loss',
+  loss: 'win',
+  'syzygy-win': 'syzygy-loss',
+  'syzygy-loss': 'syzygy-win',
+  'cursed-win': 'blessed-loss',
+  'blessed-loss': 'cursed-win',
+  'maybe-win': 'maybe-loss',
+  'maybe-loss': 'maybe-win',
+};
+
+export function tbMoveToMoverPerspective(
+  category: string,
+  dtm: number | null,
+): { category: string; dtm: number | null } {
+  return {
+    category: TB_CATEGORY_MIRROR[category] ?? category,
+    dtm: dtm !== null ? -dtm : null,
+  };
+}
+
+/**
+ * Score one tablebase move from the perspective of the side that plays it.
+ * Takes the RAW api `category`/`dtm` and inverts them first (see F3 above).
+ */
+export function tbMoveScore(category: string, dtm: number | null): { cp: number | null; mate: number | null } {
+  const mover = tbMoveToMoverPerspective(category, dtm);
+  const dtmAbs = mover.dtm !== null ? Math.max(1, Math.abs(mover.dtm)) : 50;
+  switch (mover.category) {
+    case 'win':
+    case 'syzygy-win':
+      return { cp: null, mate: dtmAbs };
+    case 'loss':
+    case 'syzygy-loss':
+      return { cp: null, mate: -dtmAbs };
+    default:
+      return { cp: 0, mate: null };
   }
 }
 
-function cachedLineToMoverWin(line: {
+/**
+ * Cached lines are stored White-relative (Position model convention) — flip to
+ * the mover's perspective at the boundary.
+ */
+export function cachedLineToMoverWin(line: {
   scoreType?: 'cp' | 'mate';
   scoreValue?: number;
   eval?: { type: 'cp' | 'mate'; value: number };

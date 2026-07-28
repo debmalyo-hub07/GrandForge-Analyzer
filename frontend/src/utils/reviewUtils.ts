@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 import type { MoveClassification, MoveReview, RatingConfidence } from '../types/review';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -116,79 +117,108 @@ function stdev(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+/**
+ * A move that carries a real decision, and therefore an accuracy score.
+ *
+ * F7 (2026-07-29): `playerAccuracy` and `phaseSummary` each skipped book and
+ * forced moves, but `GameReviewService` built its `ratedMoves` set with
+ * `!m.isBookMove` alone. Forced moves therefore fed `avgCpl`, `avgComplexity`
+ * and the `moveCount` denominator behind the performance rating — charging a
+ * player ~2 points per centipawn for a recapture they had no choice about,
+ * and leaving the phase-row move counts unable to sum to the rating's
+ * denominator. One predicate, three call sites.
+ */
+export function isRatedMove(m: MoveReview): boolean {
+  return !m.isBookMove && m.classification !== 'forced' && m.unscored !== true;
+}
+
+/**
+ * Weighted game accuracy for one colour, 0..100.
+ *
+ * F8 (2026-07-29): the volatility weighting is now a faithful port of
+ * `AccuracyPercent.gameAccuracy`, which builds ONE interleaved White-relative
+ * Win% series over all plies and only splits by colour at the end:
+ *
+ *   allWinPercents = Cp.initial :: cps            // length plies + 1
+ *   windowSize     = (cps.size / 10).squeeze(2, 8)
+ *   windows        = fill(windowSize - 2)(take(windowSize)) ::: sliding(windowSize)
+ *
+ * The previous port built a PER-COLOUR series, which halved the window size
+ * (a 60-ply game got 3 instead of 6), smoothed the windows by dropping the
+ * opponent's swings, and truncated instead of padding the leading windows —
+ * all three push weights onto the 0.5 floor and flatten the weighting the
+ * algorithm exists to apply, so reported accuracy drifted from the Lichess
+ * figure for the same PGN.
+ *
+ * Two deliberate deviations remain, both forced by our data model:
+ *   - per-move accuracy uses each move's own `evalBefore`/`evalAfter` (two
+ *     independent searches) rather than consecutive entries of one series;
+ *   - excluded/unrated plies carry the previous series value forward instead of
+ *     contributing their placeholder eval, so the 1:1 ply→window mapping holds
+ *     without injecting a fabricated dead-equal point.
+ *
+ * Returns 100 when the player has no rated move at all. `null` would be more
+ * honest (the audit's suggestion) but `PlayerReview.accuracy` is typed `number`
+ * and consumed by components outside this change's scope.
+ */
 export function playerAccuracy(
   moveReviews: MoveReview[],
   color: 'white' | 'black',
   startingColor: 'w' | 'b' = 'w',
   excludePlyIndices?: ReadonlySet<number>,
 ): number {
-  const moverIsWhite = (i: number) =>
-    startingColor === 'w' ? i % 2 === 0 : i % 2 !== 0;
-  const isPlayerMove = (i: number) =>
-    color === 'white' ? moverIsWhite(i) : !moverIsWhite(i);
-  // REV-4: plies the engine could not evaluate are skipped entirely — neither
-  // their (placeholder) Win% nor their accuracy contributes.
-  const isExcluded = (i: number) =>
-    excludePlyIndices !== undefined && excludePlyIndices.has(moveReviews[i]?.plyIndex);
+  // Index on plyIndex, never on array position: the two agree only while
+  // moveReviews is dense, and a single skipped ply would otherwise re-attribute
+  // every later move to the wrong colour.
+  const ordered = [...moveReviews].sort((a, b) => a.plyIndex - b.plyIndex);
+  const moverIsWhite = (plyIndex: number) =>
+    startingColor === 'w' ? plyIndex % 2 === 0 : plyIndex % 2 !== 0;
+  const isPlayerMove = (plyIndex: number) =>
+    color === 'white' ? moverIsWhite(plyIndex) : !moverIsWhite(plyIndex);
+  const isExcluded = (plyIndex: number) =>
+    excludePlyIndices !== undefined && excludePlyIndices.has(plyIndex);
 
-  // Build the PER-COLOR Win% (0..100) series for this player, White-relative so
-  // the magnitude is meaningful (REV-2). Lichess computes windowSize and the
-  // sliding stdev window over the player's own cp-series, not the interleaved
-  // two-color sequence. Each entry is the Win% BEFORE one of this player's
-  // moves; we prepend the game's initial Win% so the first move still has a
-  // (degenerate) trailing window. evalBefore is mover-relative → flip to White
-  // POV for black moves so signs are consistent across the series.
-  const colorSeries: number[] = [
+  // Interleaved White-relative Win% (0..100). series[0] is the game's initial
+  // value; series[k] is the value AFTER the k-th ply.
+  const series: number[] = [
     cpToWinPercent(startingColor === 'w' ? INITIAL_CP : -INITIAL_CP),
   ];
-  // Parallel arrays: for each player move, its accuracy and the index into
-  // colorSeries of its "before" Win% (used as the trailing-window anchor).
-  const playerAccs: number[] = [];
-  const anchorIdx: number[] = [];
-  for (let i = 0; i < moveReviews.length; i++) {
-    if (!isPlayerMove(i)) continue;
-    // Excluded (unscored) plies don't contribute their placeholder Win% to the
-    // volatility series or an accuracy term.
-    if (isExcluded(i)) continue;
-    const m = moveReviews[i];
-    const isMoverWhite = moverIsWhite(i);
-    const whiteRelativeCp = m.evalBefore !== null
-      ? (isMoverWhite ? m.evalBefore : -m.evalBefore)
-      : null;
-    const whiteRelativeMate = m.mateBefore !== null
-      ? (isMoverWhite ? m.mateBefore : -m.mateBefore)
-      : null;
-    colorSeries.push(cpAndMateToWin(whiteRelativeCp, whiteRelativeMate) * 100);
-    // Book and forced moves carry no decision — exclude from the accuracy
-    // series (they still feed the Win% volatility window above).
-    if (m.isBookMove || m.classification === 'forced') continue;
-    // Anchor on the just-pushed entry (index = colorSeries.length - 1).
-    anchorIdx.push(colorSeries.length - 1);
-    const wBefore = cpAndMateToWin(m.evalBefore, m.mateBefore) * 100;
-    const wAfter = cpAndMateToWin(m.evalAfter, m.mateAfter) * 100;
-    playerAccs.push(accuracyFromWin(wBefore / 100, wAfter / 100));
+  for (const m of ordered) {
+    const skip = isExcluded(m.plyIndex) || m.unscored === true;
+    if (skip) {
+      series.push(series[series.length - 1]);
+      continue;
+    }
+    const isMoverWhite = moverIsWhite(m.plyIndex);
+    const whiteCp = m.evalAfter !== null ? (isMoverWhite ? m.evalAfter : -m.evalAfter) : null;
+    const whiteMate = m.mateAfter !== null ? (isMoverWhite ? m.mateAfter : -m.mateAfter) : null;
+    series.push(cpAndMateToWin(whiteCp, whiteMate) * 100);
   }
 
-  if (playerAccs.length === 0) return 100;
-
-  // windowSize from the PER-COLOR series length (Lichess: clamp(len/10, 2, 8)).
-  const window = Math.max(
-    WINDOW_MIN,
-    Math.min(WINDOW_MAX, Math.floor(colorSeries.length / 10)),
-  );
+  const plies = ordered.length;
+  const window = Math.max(WINDOW_MIN, Math.min(WINDOW_MAX, Math.floor(plies / 10)));
 
   const accs: number[] = [];
   const weights: number[] = [];
-  for (let k = 0; k < playerAccs.length; k++) {
-    const idx = anchorIdx[k];
-    // TRAILING sliding window: the `window` entries up to and including idx.
-    const lo = Math.max(0, idx - window + 1);
-    const slice = colorSeries.slice(lo, idx + 1);
-    const sd = stdev(slice);
-    const weight = Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, sd));
-    accs.push(playerAccs[k]);
-    weights.push(weight);
+  for (let i = 0; i < plies; i++) {
+    const m = ordered[i];
+    if (!isPlayerMove(m.plyIndex)) continue;
+    if (isExcluded(m.plyIndex)) continue;
+    if (!isRatedMove(m)) continue;
+
+    // Upstream prepends `windowSize - 2` copies of the first window so early
+    // moves are weighted over a full-width window instead of a degenerate one.
+    const slice = i < window - 2
+      ? series.slice(0, window)
+      : series.slice(i - window + 2, i + 2);
+    weights.push(Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, stdev(slice))));
+    accs.push(accuracyFromWin(
+      cpAndMateToWin(m.evalBefore, m.mateBefore),
+      cpAndMateToWin(m.evalAfter, m.mateAfter),
+    ));
   }
+
+  if (accs.length === 0) return 100;
 
   const totalW = weights.reduce((s, v) => s + v, 0) || 1;
   const weightedMean = accs.reduce((s, a, i) => s + a * weights[i], 0) / totalW;
@@ -200,6 +230,7 @@ export function playerAccuracy(
   const blended = (weightedMean + harmonic) / 2;
   return Math.round(Math.max(0, Math.min(100, blended)) * 10) / 10;
 }
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // PHASE 4 — CLASSIFICATION (USER SPEC)
@@ -282,13 +313,14 @@ function greatDropLimit(playerRating?: number | null): number {
 }
 
 export interface ClassifyMoveParams {
+  /** Mover-relative Win% (0..1) of the position the move was played FROM. */
   winBefore: number;
+  /** Mover-relative Win% (0..1) of the position the move led TO. */
   winAfter: number;
   isBookMove: boolean;
   isBestMove: boolean;
   isSingularChoice: boolean;
   isMaterialSacrifice: boolean;
-  deltaWin: number;
   /** Only legal move in the position — labelled 'forced', never rated. */
   isForced?: boolean;
   /** Mate-in-N before the move (mover-positive). null = no forced mate. */
@@ -307,7 +339,6 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
     isBestMove,
     isSingularChoice,
     isMaterialSacrifice,
-    deltaWin,
     isForced = false,
     mateBefore = null,
     mateAfter = null,
@@ -319,7 +350,12 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
   // before every override so a forced recapture can't score as Best/Blunder.
   if (isForced) return 'forced';
 
-  const dw = deltaWin;
+  // F5 (2026-07-29): ΔWin is DERIVED here, not accepted as a parameter. It used
+  // to be a third independent input alongside winBefore/winAfter with no
+  // invariant tying them together, which let callers (and tests) describe
+  // states that cannot occur — e.g. a positive ΔWin on a move that improved the
+  // position. Every rung and tolerance below now reads the same number.
+  const dw = Math.max(0, winBefore - winAfter);
 
   // C2: Brilliant — strict best OR engine-equivalent (within near_best tolerance).
   // Some genuine brilliancies surface as 2nd-PV at low depth due to tactic horizon.
@@ -339,9 +375,24 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
   // call it 'miss' (a near-miss) when the position is still competitive. If the
   // mate was thrown away INTO a losing position (mateAfter null AND winAfter
   // collapsed), fall through to the ΔWin ladder so it scores as 'blunder'.
+  //
+  // F4 (2026-07-29): two guards were missing.
+  //   1. `isBestMove` was never consulted, so the engine's OWN top move could be
+  //      reported as a miss — which happened on nearly every ply of a long
+  //      mating sequence and cost hundreds of rating points through missRate.
+  //   2. The `mateAfter === null` arm fired on any mate→cp transition. That is
+  //      the normal behaviour of a fixed-depth search at the mate horizon
+  //      (mate 8 before, cp 2800 after), not evidence of a squandered win. It
+  //      now needs real degradation: a Win% drop past the 'good' rung, or the
+  //      win no longer being categorical (winAfter < 0.90).
+  const MATE_HORIZON_WIN_FLOOR = 0.90;
   if (
+    !isBestMove &&
     mateBefore !== null && mateBefore > 0 &&
-    (mateAfter === null || (mateAfter > 0 && mateAfter > Math.abs(mateBefore) + 2))
+    (
+      (mateAfter === null && (dw > DELTA_WIN_THRESHOLDS.good || winAfter < MATE_HORIZON_WIN_FLOOR)) ||
+      (mateAfter !== null && mateAfter > 0 && mateAfter > Math.abs(mateBefore) + 2)
+    )
   ) {
     if (mateAfter !== null || winAfter >= 0.35) {
       // A small-swing mate drop (mate kept but slower, or mate → still clearly
@@ -361,6 +412,16 @@ export function classifyMove(params: ClassifyMoveParams): MoveClassification {
   // meaningful swing. The rating-calibrated drop limit mirrors Chess.com's
   // public note that special classifications are more forgiving below master
   // strength, while remaining deterministic and transparent.
+  //
+  // HONEST LIMIT (F5, verified 2026-07-29): all three swing gates require
+  // winAfter > winBefore, so the derived ΔWin is exactly 0 inside them and
+  // `greatDropLimit` is satisfied for every rating band. The real
+  // discriminators for Great are `isSingularChoice` plus the swing gates. The
+  // audit suggested re-expressing the tolerance as `topMoveWin - winAfter`, but
+  // GameReviewService sets `topMoveWin === win` for all three eval sources
+  // (engine/cache/tablebase), so that quantity is identical to ΔWin and would
+  // change nothing. Making the bands bite here needs rating-dependent SWING
+  // thresholds — a re-tune of frozen constants, deliberately out of scope.
   const isGreatEquivalent = isBestMove || dw <= greatDropLimit(playerRating);
   if (isGreatEquivalent && isSingularChoice) {
     const swing = winAfter - winBefore;
@@ -481,7 +542,7 @@ export function phaseSummary(phaseMoves: MoveReview[]): {
   moveCount: number;
   avgCpl: number | null;
 } {
-  const rated = phaseMoves.filter((m) => !m.isBookMove && m.classification !== 'forced');
+  const rated = phaseMoves.filter(isRatedMove);
   if (rated.length === 0) {
     return { accuracy: 0, icon: 'none', moveCount: 0, avgCpl: null };
   }
@@ -637,19 +698,45 @@ export function computePhaseBoundaries(fenPositions: string[]): PhaseBoundaries 
     }
   }
 
-  const openingEndsAtPly = middlegameStart ?? Math.min(plyCount, 20);
-  let middlegameEndsAtPly = endgameStart ?? plyCount;
-  if (middlegameEndsAtPly <= openingEndsAtPly) middlegameEndsAtPly = plyCount;
+  // Upstream `Divider.scala`:
+  //   Division(midGame.filter(m => endGame.fold(true)(m < _)), endGame, boards.size)
+  // i.e. when both trigger on the same board the MIDDLEGAME is dropped and the
+  // endgame starts there. F9 (2026-07-29): the port did the reverse — it pushed
+  // `middlegameEndsAtPly` out to `plyCount`, which emptied the endgame band, so
+  // a queen trade that drops majors+minors from 12 straight to 6 left the whole
+  // remaining rook ending labelled "Middlegame" and the Endgame row showing "No
+  // rated moves". `endgameStart` is only ever set at or after `middlegameStart`,
+  // so the equal case now naturally yields an empty middlegame band.
+  //
+  // The opening fallback follows upstream's `openingSize = middle | plies` too:
+  // a game that never satisfies any middlegame criterion is all opening. The
+  // previous 20-ply cap was invented, not ported.
+  const openingEndsAtPly = middlegameStart ?? plyCount;
+  const middlegameEndsAtPly = endgameStart ?? plyCount;
   return { openingEndsAtPly, middlegameEndsAtPly };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Material delta — true piece-sacrifice detector for Brilliant classification.
 //
-// Returns the change in moving-player's aggregate material **after the move**
-// MINUS what the move captured. A positive value means the player sacrificed
-// material. Pawn-only sacrifices (≤ 1 pawn) are excluded — chess.com Brilliant
-// requires a piece sacrifice.
+// F1 (2026-07-29): the previous implementation diffed material between the FEN
+// before and after the mover's OWN ply. A player can never lose material on
+// their own move — `moverAfter >= moverBefore` always — so the function
+// returned `<= 0` for every legal move in chess and Brilliant was unreachable.
+//
+// The sacrifice only materialises on the OPPONENT's reply, so we evaluate it
+// with a static exchange evaluation (SEE) on the destination square: how much
+// material the opponent wins by initiating the capture sequence there, minus
+// what the move itself captured, minus the value a promotion just created.
+//
+//   Bxh7+  : opponent wins the bishop (3), move captured a pawn (1) → net 2.
+//   c4     : opponent wins a pawn (1), captured nothing            → net 1 (gambit).
+//   b8=Q   : opponent wins the queen (9) but only a pawn was ever
+//            invested (promotion gain 8)                            → net 1.
+//   Bxc6   : opponent wins the bishop (3), move captured a knight (3) → net 0.
+//
+// Known limit: only the moved piece's own square is examined, so a deflection
+// that hangs a DIFFERENT piece is not counted as a sacrifice.
 //
 // Standard piece values: P=1, N=3, B=3, R=5, Q=9, K=0.
 // ────────────────────────────────────────────────────────────────────────────
@@ -657,48 +744,70 @@ const PIECE_VALUES: Record<string, number> = {
   p: 1, n: 3, b: 3, r: 5, q: 9, k: 0,
 };
 
-function totalMaterialOf(board: (string | null)[][], color: 'w' | 'b'): number {
-  let total = 0;
-  for (const row of board) {
-    for (const p of row) {
-      if (!p) continue;
-      const isWhite = p === p.toUpperCase();
-      if ((color === 'w') !== isWhite) continue;
-      total += PIECE_VALUES[p.toLowerCase()] ?? 0;
-    }
+/** Depth guard — a square can be contested by at most a handful of attackers. */
+const SEE_MAX_DEPTH = 10;
+
+/**
+ * Static exchange evaluation on one square: the material the side to move can
+ * win by capturing there, assuming both sides play the sequence optimally and
+ * either may decline at any point (hence the 0 floor at every level).
+ */
+function seeGainOn(chess: Chess, square: string, depth = 0): number {
+  if (depth >= SEE_MAX_DEPTH) return 0;
+  let best = 0;
+  for (const m of chess.moves({ verbose: true })) {
+    if (m.to !== square || !m.captured) continue;
+    // Under-promotions can't beat the queen promotion for material purposes.
+    if (m.promotion && m.promotion !== 'q') continue;
+    const capturedValue = PIECE_VALUES[m.captured] ?? 0;
+    const promotionGain = m.promotion
+      ? (PIECE_VALUES[m.promotion] ?? 0) - PIECE_VALUES.p
+      : 0;
+    chess.move({ from: m.from, to: m.to, promotion: m.promotion });
+    const gain = capturedValue + promotionGain - seeGainOn(chess, square, depth + 1);
+    chess.undo();
+    if (gain > best) best = gain;
   }
-  return total;
+  return best;
 }
 
 /**
- * Compute the moving player's net material loss from the move (positive = lost
- * material, i.e., sacrifice). Compares aggregate material on both sides BEFORE
- * and AFTER the move and returns the player's drop.
- *
- * Threshold for "true piece sacrifice": net loss ≥ 2 (excludes single-pawn sacs).
+ * Net material the mover spends on `playedUci` (positive = sacrifice).
+ * Returns 0 for an unparseable position or an illegal move.
  */
-export function netMaterialSacrifice(fenBefore: string, fenAfter: string): number {
-  const before = parseFen(fenBefore);
-  const after = parseFen(fenAfter);
-  if (!before || !after) return 0;
+export function netMaterialSacrifice(fenBefore: string, playedUci: string): number {
+  if (!playedUci || playedUci.length < 4) return 0;
+  let chess: Chess;
+  try {
+    chess = new Chess(fenBefore);
+  } catch {
+    return 0;
+  }
 
-  const moverColor: 'w' | 'b' = fenBefore.split(' ')[1] === 'b' ? 'b' : 'w';
-  const opponentColor: 'w' | 'b' = moverColor === 'w' ? 'b' : 'w';
+  const to = playedUci.slice(2, 4);
+  let move: ReturnType<Chess['move']>;
+  try {
+    move = chess.move({
+      from: playedUci.slice(0, 2),
+      to,
+      promotion: playedUci.length > 4 ? playedUci[4] : undefined,
+    });
+  } catch {
+    return 0;
+  }
+  if (!move) return 0;
 
-  const moverBefore = totalMaterialOf(before.board, moverColor);
-  const moverAfter = totalMaterialOf(after.board, moverColor);
-  const oppBefore = totalMaterialOf(before.board, opponentColor);
-  const oppAfter = totalMaterialOf(after.board, opponentColor);
+  const capturedValue = move.captured ? (PIECE_VALUES[move.captured] ?? 0) : 0;
+  const promotionGain = move.promotion
+    ? (PIECE_VALUES[move.promotion] ?? 0) - PIECE_VALUES.p
+    : 0;
 
-  // Mover's piece value loss (e.g., promoted pawn → queen makes this NEGATIVE).
-  const moverLoss = moverBefore - moverAfter;
-  // Opponent material lost (i.e., what mover captured).
-  const captured = oppBefore - oppAfter;
-
-  // Net material spent (mover loss minus what they captured back).
-  return moverLoss - captured;
+  // `chess` is now at the position after the move, so it is the opponent's turn.
+  return seeGainOn(chess, to) - capturedValue - promotionGain;
 }
 
-export function isTruePieceSacrifice(fenBefore: string, fenAfter: string): boolean {
-  return netMaterialSacrifice(fenBefore, fenAfter) >= 2;
+/** Threshold for "true piece sacrifice": net spend ≥ 2 (excludes pawn gambits). */
+export function isTruePieceSacrifice(fenBefore: string, playedUci: string): boolean {
+  return netMaterialSacrifice(fenBefore, playedUci) >= 2;
 }
+

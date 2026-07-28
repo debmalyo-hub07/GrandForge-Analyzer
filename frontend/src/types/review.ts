@@ -61,6 +61,13 @@ export interface MoveReview {
   pvLine: string[];           // engine's best continuation (UCI) from this position
   complexity: number;         // per-ply top-2 MultiPV Win% spread (0..1); 0 = forgiving
   reason: string;             // human-readable explanation of classification
+  /**
+   * The engine produced no usable eval for this ply even after a retry, so
+   * `evalBefore`/`evalAfter`/`cpl`/`classification` are placeholders, not
+   * measurements. Already excluded from accuracy, CPL, complexity, counts and
+   * phase rows; consumers must not render it as a graded move (F10).
+   */
+  unscored?: boolean;
 }
 
 export type RatingConfidence = 'none' | 'provisional' | 'low' | 'medium' | 'high';
@@ -92,6 +99,13 @@ export interface GameReviewResult {
   reviewedAt: string;          // ISO timestamp
   openingName: string | null;
   ecoCode: string | null;
+  /**
+   * Side to move in the game's FIRST position, so consumers can map plyIndex →
+   * mover without assuming White started. Absent on results persisted before
+   * 2026-07-29; consumers then fall back to `plyIndex % 2 === 0 ⇒ White`, which
+   * is wrong for games imported from a black-to-move FEN.
+   */
+  startingColor?: 'w' | 'b';
   /**
    * Line identity — the exact move-tree line this review was computed on, so
    * playback / glyphs / arrows follow the REVIEWED path instead of blindly

@@ -21,9 +21,16 @@ const DOT_COLORS: Partial<Record<MoveReview['classification'], string>> = {
   blunder: '#ca3431',
 };
 
-/** Mover-relative eval → White-relative centipawns (mate folded to ±MATE_CP). */
-function whiteCpAfter(m: MoveReview): number {
-  const moverIsWhite = m.plyIndex % 2 === 0;
+/**
+ * Mover-relative eval -> White-relative centipawns (mate folded to ±MATE_CP).
+ *
+ * F11: `startingColor` is the side to move at ply 0. Assuming White (the old
+ * `plyIndex % 2 === 0`) sign-flips every point of the graph for a game imported
+ * from a black-to-move FEN. Legacy results carry no `startingColor`, so 'w'
+ * stays the fallback.
+ */
+export function whiteCpAfter(m: MoveReview, startingColor: 'w' | 'b' = 'w'): number {
+  const moverIsWhite = startingColor === 'w' ? m.plyIndex % 2 === 0 : m.plyIndex % 2 !== 0;
   const cp = m.mateAfter !== null ? Math.sign(m.mateAfter) * MATE_CP : m.evalAfter;
   return moverIsWhite ? cp : -cp;
 }
@@ -41,6 +48,7 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverPly, setHoverPly] = useState<number | null>(null);
 
+  const startingColor = result.startingColor ?? 'w';
   const reviews = result.moveReviews;
   const plyCount = reviews.length;
 
@@ -49,10 +57,16 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
 
   const { areaPath, linePath, points } = useMemo(() => {
     const pts: Array<{ x: number; y: number; m: MoveReview }> = [];
-    let d = `M 0 ${cpToY(20).toFixed(2)}`; // slight white edge at start
+    // Slight edge toward the first mover at the start of the graph.
+    let lastY = cpToY(startingColor === 'w' ? 20 : -20);
+    let d = `M 0 ${lastY.toFixed(2)}`;
     for (const m of reviews) {
       const x = xAt(m.plyIndex + 1);
-      const y = cpToY(whiteCpAfter(m));
+      // Unscored plies carry a placeholder 0 eval — plotting it drops a
+      // dead-equal point into the middle of a decided game. Hold the last real
+      // value across the gap instead (F10).
+      const y = m.unscored ? lastY : cpToY(whiteCpAfter(m, startingColor));
+      lastY = y;
       d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
       pts.push({ x, y, m });
     }
@@ -61,7 +75,7 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
       areaPath: `${d} L ${W} ${H} L 0 ${H} Z`, // white fills BELOW the curve: white better → curve up → big white area
       points: pts,
     };
-  }, [reviews, plyCount]);
+  }, [reviews, plyCount, startingColor]);
 
   // Current ply along the reviewed line (for the cursor). Index in
   // reviewedNodeIds == plies from root; -1 when off the reviewed line.
@@ -85,6 +99,9 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
   if (plyCount === 0) return null;
 
   const hovered = hoverPly !== null && hoverPly > 0 ? reviews[hoverPly - 1] : null;
+  const hoveredMoverIsWhite =
+    hovered !== null &&
+    (startingColor === 'w' ? hovered.plyIndex % 2 === 0 : hovered.plyIndex % 2 !== 0);
 
   return (
     <div className="eval-graph" aria-label="Evaluation graph">
@@ -115,7 +132,7 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
         <line x1={0} y1={H / 2} x2={W} y2={H / 2} className="eval-graph-mid" vectorEffect="non-scaling-stroke" />
         {/* key-moment dots */}
         {points.map(({ x, y, m }) => {
-          const color = DOT_COLORS[m.classification];
+          const color = m.unscored ? undefined : DOT_COLORS[m.classification];
           if (!color) return null;
           return (
             <circle
@@ -147,14 +164,16 @@ export function EvalGraph({ result }: { result: GameReviewResult }) {
         {hovered ? (
           <>
             <span className="eval-graph-caption-move">
-              {Math.floor(hovered.plyIndex / 2) + 1}
-              {hovered.plyIndex % 2 === 0 ? '. ' : '… '}
+              {Math.floor((hovered.plyIndex + (startingColor === 'w' ? 0 : 1)) / 2) + 1}
+              {hoveredMoverIsWhite ? '. ' : '… '}
               {hovered.san}
             </span>
             <span className="eval-graph-caption-eval">
-              {hovered.mateAfter !== null
-                ? `M${Math.abs(hovered.mateAfter)}`
-                : `${whiteCpAfter(hovered) >= 0 ? '+' : ''}${(whiteCpAfter(hovered) / 100).toFixed(2)}`}
+              {hovered.unscored
+                ? 'not analysed'
+                : hovered.mateAfter !== null
+                  ? `M${Math.abs(hovered.mateAfter)}`
+                  : `${whiteCpAfter(hovered, startingColor) >= 0 ? '+' : ''}${(whiteCpAfter(hovered, startingColor) / 100).toFixed(2)}`}
             </span>
           </>
         ) : (

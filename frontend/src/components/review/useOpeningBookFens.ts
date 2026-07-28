@@ -11,31 +11,63 @@ interface OpeningLookupResponse {
 }
 
 /**
+ * Positions the confirmed-book moves were played FROM.
+ *
+ * `fensAlongLine[k]` is the position reached AFTER k plies, and the move at
+ * plyIndex j is played from `fensAlongLine[j]`. With `matchedPlies` confirmed
+ * theory moves those are indices `0 .. matchedPlies - 1`.
+ *
+ * F6 (2026-07-29): the old loop added indices `0 .. matchedPlies`, one too many.
+ * Index `matchedPlies` is by definition the position the FIRST OUT-OF-BOOK move
+ * is played from, so that move was labelled `book` and thereby dropped from the
+ * accuracy series, from `ratedMoves` and from phase scoring — once per game,
+ * every game. A genuine opening blunder (3.Qh5 after `e4 e5`) vanished from the
+ * score entirely.
+ */
+export function bookFensUpTo(
+  fensAlongLine: readonly (string | undefined)[],
+  matchedPlies: number,
+): Set<string> {
+  const fens = new Set<string>();
+  const upTo = Math.min(Math.max(0, matchedPlies), fensAlongLine.length);
+  for (let i = 0; i < upTo; i++) {
+    const fen = fensAlongLine[i];
+    if (fen) fens.add(fen);
+  }
+  return fens;
+}
+
+/**
  * Returns a Set of book FENs for the review service.
  *
  * Strategy: ask the ECO lookup endpoint to match the longest prefix of the
  * mainline move sequence (up to 16 plies). The response tells us exactly how
- * many plies are confirmed-book. We mark fens[0..matchedPlies] as book FENs;
- * everything else falls through to engine classification.
+ * many plies are confirmed-book; `bookFensUpTo` turns that into the set of
+ * positions those moves were played from.
  *
  * Falls back to a conservative empty set if the lookup fails — better to
  * classify a real opening move as "Best" than to suppress a legitimate blunder
  * by tagging it Book heuristically.
+ *
+ * The result is memoised against the mainline node path. ReviewTab is not
+ * remounted when a new game is loaded into the move tree, so an unkeyed cache
+ * (the previous behaviour) served game A's book FENs when reviewing game B.
  */
 export function useOpeningBookFens(): () => Promise<Set<string>> {
-  const cacheRef = useRef<Set<string> | null>(null);
+  const cacheRef = useRef<{ key: string; fens: Set<string> } | null>(null);
 
   return async () => {
-    if (cacheRef.current) return cacheRef.current;
-
     const moveTree = useGameStore.getState().moveTree;
     const mainline = getMainlinePath(moveTree);
-    const fens = new Set<string>();
+    const key = mainline.join('/');
+    if (cacheRef.current?.key === key) return cacheRef.current.fens;
 
-    if (mainline.length <= 1) {
-      cacheRef.current = fens;
+    const remember = (fens: Set<string>) => {
+      cacheRef.current = { key, fens };
       return fens;
-    }
+    };
+
+    if (mainline.length <= 1) return remember(new Set<string>());
 
     // Build SAN sequence for the first MAX_BOOK_PLIES.
     const sanSeq: string[] = [];
@@ -44,10 +76,7 @@ export function useOpeningBookFens(): () => Promise<Set<string>> {
       if (!node?.san) break;
       sanSeq.push(node.san);
     }
-    if (sanSeq.length === 0) {
-      cacheRef.current = fens;
-      return fens;
-    }
+    if (sanSeq.length === 0) return remember(new Set<string>());
 
     let matchedPlies = 0;
     try {
@@ -60,23 +89,11 @@ export function useOpeningBookFens(): () => Promise<Set<string>> {
       }
     } catch {
       // Network/API failure — be conservative, no book suppression.
-      cacheRef.current = fens;
-      return fens;
+      return remember(new Set<string>());
     }
 
-    // Always mark the starting position as book (no real move yet).
-    const root = moveTree.nodes[mainline[0]];
-    if (root?.fen) fens.add(root.fen);
-
-    // FENs reached AFTER plies 1..matchedPlies are in book theory.
-    for (let i = 1; i <= matchedPlies; i++) {
-      const nodeId = mainline[i];
-      if (!nodeId) break;
-      const node = moveTree.nodes[nodeId];
-      if (node?.fen) fens.add(node.fen);
-    }
-
-    cacheRef.current = fens;
-    return fens;
+    // fensAlongLine[k] = position after k plies along the mainline.
+    const fensAlongLine = mainline.map((nodeId) => moveTree.nodes[nodeId]?.fen);
+    return remember(bookFensUpTo(fensAlongLine, matchedPlies));
   };
 }
