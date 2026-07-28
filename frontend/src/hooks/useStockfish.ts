@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useEngineStore } from '../store/engineStore';
-import type { EngineVersion } from '../services/EngineManager';
+import type { EngineManager, EngineVersion } from '../services/EngineManager';
 
 interface UseStockfishOptions {
+  /** Force a specific build. Omit it (the normal case) so `initEngine` falls
+   *  back to the hydrated `engineVersion` — passing a literal here made the
+   *  persisted choice unreachable AND overwrote it with the literal on every
+   *  boot, so picking SF16 never survived a reload. */
   defaultEngine?: EngineVersion;
 }
 
 export function useStockfish(options: UseStockfishOptions = {}) {
-  const { defaultEngine = 'sf18-lite' } = options;
+  const { defaultEngine } = options;
   const initEngine = useEngineStore((s) => s.initEngine);
   const manager = useEngineStore((s) => s.manager);
   const isLoading = useEngineStore((s) => s.isLoading);
@@ -16,9 +20,11 @@ export function useStockfish(options: UseStockfishOptions = {}) {
 
   useEffect(() => {
     let cancelled = false;
+    let created: EngineManager | null = null;
     (async () => {
       try {
         const localManager = await initEngine(defaultEngine);
+        created = localManager;
         if (cancelled) {
           // Unmounted during the (potentially multi-second) WASM load. initEngine
           // has now written the manager into the store, but our cleanup already
@@ -39,7 +45,15 @@ export function useStockfish(options: UseStockfishOptions = {}) {
       cancelled = true;
       // Terminate the manager if it's already in the store. If init is still
       // mid-load, the orphan-termination branch above handles it once it lands.
-      useEngineStore.getState().manager?.terminate();
+      const published = useEngineStore.getState().manager;
+      const target = created ?? published;
+      target?.terminate();
+      // Never leave a terminated manager in the store: every downstream guard
+      // checks only for presence, so startAnalysis would set isRunning:true and
+      // then silently no-op inside send() — "Searching – depth N" forever.
+      if (published !== null && published === target) {
+        useEngineStore.setState({ manager: null, adapter: null, isRunning: false });
+      }
     };
   }, [defaultEngine, initEngine]);
 

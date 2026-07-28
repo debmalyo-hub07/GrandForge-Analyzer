@@ -3,6 +3,7 @@ import { ChevronDown, Cpu } from 'lucide-react';
 import { useEngineStore } from '../../store/engineStore';
 import {
   ENGINE_CONFIGS,
+  isMultiThreadingAvailable,
   type EngineVersion,
 } from '../../services/EngineManager';
 
@@ -13,13 +14,21 @@ const ENGINE_ORDER: EngineVersion[] = [
   'sf16-lite',
 ];
 
+const MT_UNAVAILABLE_TITLE =
+  'Requires cross-origin isolation — multi-threading unavailable in this context';
+
 export function EngineVersionSelector() {
   const engineVersion = useEngineStore((s) => s.engineVersion);
   const switchEngine = useEngineStore((s) => s.switchEngine);
   const isLoading = useEngineStore((s) => s.isLoading);
   const [open, setOpen] = useState(false);
 
-  const current = ENGINE_CONFIGS[engineVersion];
+  // A persisted id naming a removed engine (the dropped 'sf18-full') reaches
+  // render before initEngine can normalize it, so an unguarded dereference threw
+  // and the ErrorBoundary swallowed the page — permanently, since the effects
+  // that would have fixed the value never ran.
+  const current = ENGINE_CONFIGS[engineVersion] ?? ENGINE_CONFIGS['sf18-lite'];
+  const mtAvailable = isMultiThreadingAvailable();
 
   const handleSelect = async (v: EngineVersion) => {
     setOpen(false);
@@ -62,16 +71,20 @@ export function EngineVersionSelector() {
             {ENGINE_ORDER.map((v) => {
               const cfg = ENGINE_CONFIGS[v];
               const active = v === engineVersion;
+              const disabled = cfg.multiThreaded === true && !mtAvailable;
               return (
                 <li key={v} role="option" aria-selected={active}>
                   <button
                     type="button"
+                    disabled={disabled}
                     onClick={() => handleSelect(v)}
-                    title={cfg.description}
+                    title={disabled ? MT_UNAVAILABLE_TITLE : cfg.description}
                     className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors ${
-                      active
-                        ? 'bg-[var(--bg-hover)] text-[var(--text-accent)]'
-                        : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                      disabled
+                        ? 'cursor-not-allowed text-[var(--text-muted)] opacity-50'
+                        : active
+                          ? 'bg-[var(--bg-hover)] text-[var(--text-accent)]'
+                          : 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                     }`}
                   >
                     <div className="flex w-full items-center justify-between">
@@ -81,7 +94,7 @@ export function EngineVersionSelector() {
                       </span>
                     </div>
                     <span className="text-[11px] text-[var(--text-secondary)] leading-tight">
-                      {cfg.description}
+                      {disabled ? MT_UNAVAILABLE_TITLE : cfg.description}
                     </span>
                   </button>
                 </li>

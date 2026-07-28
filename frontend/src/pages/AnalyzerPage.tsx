@@ -35,7 +35,10 @@ import type { IndexedGame } from '../services/GameEngineAdapter';
 
 export function AnalyzerPage() {
   const { id } = useParams<{ id?: string }>();
-  const { isReady } = useStockfish({ defaultEngine: 'sf18-lite' });
+  // No defaultEngine: initEngine reads the hydrated (persisted) engineVersion.
+  // Passing a literal here silently reverted the user's engine choice on every
+  // page load and overwrote the stored preference with it.
+  const { isReady } = useStockfish();
 
   // Drive opening detection and review playback side-effects while the page is mounted.
   useOpeningDetect();

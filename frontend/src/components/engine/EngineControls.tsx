@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Zap, ZapOff, ChevronDown, ChevronRight, Infinity as InfinityIcon, Square, Play } from 'lucide-react';
+import { Zap, ZapOff, ChevronDown, ChevronRight, Infinity as InfinityIcon, Square, Play, AlertTriangle, RotateCw } from 'lucide-react';
 import Toggle from '../ui/Toggle';
 import Slider from '../ui/Slider';
 import { useEngineStore } from '../../store/engineStore';
 import { useUIStore } from '../../store/uiStore';
+import { engineSupportsOption, isMultiThreaded } from '../../services/EngineManager';
 
 const MULTIPV_OPTIONS: (1 | 2 | 3 | 4 | 5)[] = [1, 2, 3, 4, 5];
 const HASH_OPTIONS = [16, 32, 64, 128, 256, 512];
@@ -19,8 +20,19 @@ export function EngineControls() {
   const setEngineSettings = useEngineStore((s) => s.setEngineSettings);
   const isRunning = useEngineStore((s) => s.isRunning);
   const currentDepth = useEngineStore((s) => s.currentDepth);
+  const engineVersion = useEngineStore((s) => s.engineVersion);
+  const engineError = useEngineStore((s) => s.engineError);
+  const isLoading = useEngineStore((s) => s.isLoading);
+  const retryEngineInit = useEngineStore((s) => s.retryEngineInit);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Only sf16 implements `Use NNUE`; on the other builds the toggle used to kill
+  // the running search and restart from depth 1 to send a command the engine
+  // answers with `No such option`. Threads is likewise only honored by the MT
+  // build (the `-single` binaries accept the option and ignore it).
+  const nnueSupported = engineSupportsOption(engineVersion, 'Use NNUE');
+  const threadsMeaningful = isMultiThreaded(engineVersion);
 
   const handleToggleEngine = (v: boolean) => {
     setEnabled(v);
@@ -29,6 +41,25 @@ export function EngineControls() {
 
   return (
     <div className="engine-controls flex flex-col gap-3 px-3 py-3 border-b border-[var(--border)]">
+      {engineError && (
+        <div
+          role="alert"
+          data-testid="engine-error"
+          className="flex items-start gap-2 rounded-md border border-[var(--miss)] bg-[var(--bg-elevated)] px-2.5 py-2 text-xs text-[var(--text-primary)]"
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[var(--miss)]" />
+          <span className="flex-1 leading-snug">{engineError}</span>
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => { void retryEngineInit(); }}
+            className="flex items-center gap-1 rounded px-2 h-6 font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] disabled:opacity-40"
+          >
+            <RotateCw size={11} /> Retry
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isEnabled ? (
@@ -137,9 +168,14 @@ export function EngineControls() {
               max={MAX_THREADS}
               value={engineSettings.threads}
               onChange={(v) => setEngineSettings({ threads: v })}
-              disabled={!isEnabled}
+              disabled={!isEnabled || !threadsMeaningful}
             />
-
+            {!threadsMeaningful && (
+              <p className="-mt-2 text-[10px] leading-tight text-[var(--text-muted)]">
+                Single-threaded build — switch to Stockfish 18 (Lite, Multi-threaded) to use more
+                than one thread.
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-secondary)] font-medium uppercase tracking-wide">
@@ -186,13 +222,15 @@ export function EngineControls() {
               formatValue={(v) => (v === 20 ? 'Max' : String(v))}
             />
 
-            <Toggle
-              label="NNUE"
-              description="Neural-net evaluation"
-              checked={engineSettings.useNNUE}
-              onChange={(v) => setEngineSettings({ useNNUE: v })}
-              disabled={!isEnabled}
-            />
+            {nnueSupported && (
+              <Toggle
+                label="NNUE"
+                description="Neural-net evaluation"
+                checked={engineSettings.useNNUE}
+                onChange={(v) => setEngineSettings({ useNNUE: v })}
+                disabled={!isEnabled}
+              />
+            )}
           </div>
         )}
       </div>

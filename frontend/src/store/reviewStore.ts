@@ -18,7 +18,15 @@ interface ReviewState {
   clearReview: () => void;
   setIsPlaying: (playing: boolean) => void;
   togglePlayback: () => void;
+  /** Hand the store the abort hook for the running GameReviewService (null to
+   *  deregister when the run settles). Without it `clearReview` only resets the
+   *  UI while the review loop keeps crunching the OLD game's positions. */
+  registerCanceller: (fn: (() => void) | null) => void;
 }
+
+// Kept out of the state object on purpose: it changes twice per review run and
+// nothing renders from it, so storing it would churn every subscriber.
+let activeCanceller: (() => void) | null = null;
 
 export const useReviewStore = create<ReviewState>((set, get) => ({
   result: null,
@@ -49,7 +57,19 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     if (!isReviewMode || !result) return;
     set({ isPlaying: !isPlaying });
   },
+  registerCanceller: (fn) => { activeCanceller = fn; },
   clearReview: () => {
+    // Cancel first. gameStore.resetTransientStateForNewGame calls this on every
+    // loadPGN/loadFEN/resetBoard, so importing a game mid-review would otherwise
+    // leave a zombie loop: it keeps hammering the worker on the OLD game, its
+    // next onProgress flips phase back to 'analyzing' (re-freezing live analysis
+    // on the newly loaded game), and it finally publishes a result whose
+    // reviewedNodeIds point at nodes of a tree that no longer exists.
+    const cancel = activeCanceller;
+    activeCanceller = null;
+    if (cancel) {
+      try { cancel(); } catch (e) { console.error('GrandForge: review cancel failed', e); }
+    }
     // Arrow/highlight wiping is owned by gameStore.resetTransientStateForNewGame
     // (the only full-reset entry point). Keeping it out of here means a stray
     // clearReview() can't nuke the user's manual arrows.

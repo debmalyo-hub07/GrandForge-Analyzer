@@ -122,6 +122,10 @@ export function ReviewTab() {
         }
       });
       serviceRef.current = svc;
+      // Give the store cancellation authority for this run: clearReview() (which
+      // fires on any new-game load) must be able to stop the loop, not just
+      // blank the UI while it keeps crunching.
+      useReviewStore.getState().registerCanceller(() => svc.cancel());
       const reviewResult = await svc.reviewGame(game, depth, bookFens);
       // Restart engine analysis on the current position after review completes,
       // so the evaluation bar doesn't show a stale/empty draw bar.
@@ -157,6 +161,7 @@ export function ReviewTab() {
       void writeJobState(status, depth, undefined, message, game._id || undefined);
     } finally {
       serviceRef.current = null;
+      useReviewStore.getState().registerCanceller(null);
       setIsStarting(false);
     }
   };

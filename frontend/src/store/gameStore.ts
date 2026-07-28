@@ -167,6 +167,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     if (!result) return false;
 
+    // Both branches below navigate the board, so the manual arrows/highlights
+    // that annotated the previous position are now meaningless — clear once
+    // here. Previously only the transposition branch did, so drawing an arrow
+    // and playing a NEW move left it pointing at the old position's squares.
+    clearManualAnnotations();
+
     const existingChildId = parent.children.find((cid) => {
       const c = moveTree.nodes[cid];
       return c && c.uci === `${result.from}${result.to}${result.promotion ?? ''}`;
@@ -175,7 +181,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (existingChildId) {
       const child = moveTree.nodes[existingChildId];
       const newChess = new Chess(child.fen);
-      clearManualAnnotations();
       set({
         chess: newChess,
         currentFen: child.fen,

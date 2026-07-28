@@ -13,22 +13,58 @@ export interface EngineConfigEntry {
    *  builds ignore Threads. Cross-origin isolation (COOP/COEP) must be active
    *  for the SharedArrayBuffer the MT build needs, or it falls back to 1. */
   multiThreaded?: boolean;
+  /** UCI option names this build actually implements. Anything not listed is
+   *  never emitted — the engines answer unknown options with `No such option`,
+   *  so sending them is a silent no-op that makes the corresponding UI control
+   *  a lie. Verified by scanning each wasm's option-name table. */
+  supportedOptions: readonly string[];
 }
 
+// Every build implements these. Only sf16 additionally has `Use NNUE` and
+// `UCI_AnalyseMode` (the sf17/sf18 lite builds are NNUE-only and have no
+// classical eval to switch to, so both options were dropped upstream).
+const COMMON_OPTIONS = [
+  'Hash',
+  'Threads',
+  'MultiPV',
+  'Skill Level',
+  'UCI_LimitStrength',
+  'UCI_Elo',
+  'UCI_ShowWDL',
+] as const;
+
 export const ENGINE_CONFIGS: Record<EngineVersion, EngineConfigEntry> = {
-  'sf18-lite':    { id: 'sf18-lite',    label: 'Stockfish 18 (Lite)',         file: 'stockfish-18-lite-single.js',   sizeMB: 7,   description: 'Recommended — fast loading, superhuman strength' },
+  'sf18-lite':    { id: 'sf18-lite',    label: 'Stockfish 18 (Lite)',         file: 'stockfish-18-lite-single.js',   sizeMB: 7,   description: 'Recommended — fast loading, superhuman strength', supportedOptions: COMMON_OPTIONS },
   // Multi-threaded lite build. stockfish-18-lite.js + .wasm are copied into
   // public/stockfish/ by scripts/copyStockfish.mjs. Honors Threads only under
   // cross-origin isolation (COOP/COEP), else the worker falls back to 1 thread.
-  'sf18-lite-mt': { id: 'sf18-lite-mt', label: 'Stockfish 18 (Lite, Multi-threaded)', file: 'stockfish-18-lite.js',   sizeMB: 7,   description: 'Lite build using multiple CPU threads', multiThreaded: true },
-  'sf17-lite':    { id: 'sf17-lite',    label: 'Stockfish 17.1 (Lite)',       file: 'stockfish-17.1-lite-single.js', sizeMB: 7,   description: 'Previous generation for comparison' },
-  'sf16-lite':    { id: 'sf16-lite',    label: 'Stockfish 16',                file: 'stockfish-16-lite-single.js',   sizeMB: 40,  description: 'Classic NNUE engine for comparison' },
+  'sf18-lite-mt': { id: 'sf18-lite-mt', label: 'Stockfish 18 (Lite, Multi-threaded)', file: 'stockfish-18-lite.js',   sizeMB: 7,   description: 'Lite build using multiple CPU threads', multiThreaded: true, supportedOptions: COMMON_OPTIONS },
+  'sf17-lite':    { id: 'sf17-lite',    label: 'Stockfish 17.1 (Lite)',       file: 'stockfish-17.1-lite-single.js', sizeMB: 7,   description: 'Previous generation for comparison', supportedOptions: COMMON_OPTIONS },
+  'sf16-lite':    { id: 'sf16-lite',    label: 'Stockfish 16',                file: 'stockfish-16-lite-single.js',   sizeMB: 40,  description: 'Classic NNUE engine for comparison', supportedOptions: [...COMMON_OPTIONS, 'Use NNUE', 'UCI_AnalyseMode'] },
 };
 
 /** Whether the given engine version is a multi-threaded build. Used to decide
  *  if a Threads value > 1 is meaningful for the loaded engine. */
 export function isMultiThreaded(version: EngineVersion | null): boolean {
   return version !== null && ENGINE_CONFIGS[version]?.multiThreaded === true;
+}
+
+/** Whether `option` exists on the given build. Permissive for an unknown/null
+ *  version so a future engine id can never silently lose all its options. */
+export function engineSupportsOption(version: EngineVersion | null, option: string): boolean {
+  if (version === null) return true;
+  const cfg = ENGINE_CONFIGS[version];
+  if (!cfg) return true;
+  return cfg.supportedOptions.includes(option);
+}
+
+/** True when the runtime can host a multi-threaded WASM build. The MT worker
+ *  requests a shared WebAssembly.Memory and aborts during module init without
+ *  SharedArrayBuffer, which only exists under cross-origin isolation. */
+export function isMultiThreadingAvailable(): boolean {
+  if (typeof SharedArrayBuffer === 'undefined') return false;
+  if (typeof globalThis.crossOriginIsolated === 'undefined') return true;
+  return globalThis.crossOriginIsolated === true;
 }
 
 export interface AnalyzeRequest {
@@ -103,6 +139,10 @@ export interface SearchInfoLine {
   nps?: number;
   hashfull?: number;
   wdl?: WDL;
+  /** Set when the score carried `lowerbound`/`upperbound`. Aspiration-window
+   *  bound scores are one-sided fail-high/fail-low signals, NOT evaluations —
+   *  consumers must keep the last exact score instead of overwriting it. */
+  bound?: 'lower' | 'upper';
 }
 
 export interface SearchResult {
@@ -139,6 +179,14 @@ const DEPTH_GRACE_MS = 90000;
 // plateaued at high depth (or solved a position) but is intentionally kept
 // alive. 5 min is well past any real inter-info gap yet still bounds a hang.
 const INFINITE_GRACE_MS = 300000;
+
+// After the info-gap grace expires we send `stop`. A healthy engine answers
+// with `bestmove` within milliseconds; a genuinely wedged WASM instance never
+// reads the command at all. If no bestmove (and no new info) arrives within
+// this window the worker is declared dead: every outstanding promise is
+// rejected and the engine is torn down and reloaded, so an awaiting
+// GameReviewService.evaluate() can never hang forever.
+const WEDGE_ESCALATION_MS = 5000;
 
 export function infoGapGraceMs(req: { moveTimeMs?: number | null; infinite?: boolean }): number {
   if (req.moveTimeMs && req.moveTimeMs > 0) return MOVETIME_GRACE_MS;
@@ -193,41 +241,65 @@ export class EngineManager {
 
   // Tunable UCI options. Applied at uciok and live via setOptions().
   private options: EngineOptions = { ...DEFAULT_ENGINE_OPTIONS };
+  // Set when setOptions() lands mid-search: UCI forbids `setoption` while the
+  // engine is searching (Hash reallocates the TT, Threads respawns the pool),
+  // so the push is deferred to the terminating `bestmove`.
+  private pendingOptions = false;
+  // Timestamp of the watchdog's `stop` for the current wedge suspicion, or null
+  // when the search is behaving. Drives the terminate-and-reload escalation.
+  private wedgeStopAt: number | null = null;
 
   onInfo(cb: InfoListener): () => void {
     this.infoListeners.add(cb);
     return () => { this.infoListeners.delete(cb); };
   }
 
+  /** Whether the loaded build implements `option`. */
+  private supportsOption(option: string): boolean {
+    return engineSupportsOption(this.currentVersion, option);
+  }
+
   /** Build the ordered list of `setoption` UCI commands for the current
    *  options. Shared by the uciok handler (initial apply) and setOptions()
-   *  (live apply) so the two never drift. UCI_Elo is emitted ONLY when
-   *  limitStrength is on — with it off the engine is byte-identical to the
-   *  pre-feature behavior (Skill Level governs strength). */
+   *  (live apply) so the two never drift. Options the loaded build does not
+   *  implement are omitted (see EngineConfigEntry.supportedOptions). UCI_Elo is
+   *  emitted ONLY when limitStrength is on — with it off the engine is
+   *  byte-identical to the pre-feature behavior (Skill Level governs strength). */
   private buildOptionCommands(): string[] {
     const o = this.options;
-    const cmds = [
-      `setoption name Hash value ${o.hash}`,
-      `setoption name Threads value ${o.threads}`,
-      `setoption name Skill Level value ${o.skillLevel}`,
-      `setoption name Use NNUE value ${o.useNNUE}`,
-      `setoption name UCI_LimitStrength value ${o.limitStrength}`,
-    ];
-    if (o.limitStrength) {
-      const elo = Math.max(UCI_ELO_MIN, Math.min(UCI_ELO_MAX, Math.round(o.uciElo)));
-      cmds.push(`setoption name UCI_Elo value ${elo}`);
+    const cmds: string[] = [];
+    if (this.supportsOption('Hash')) cmds.push(`setoption name Hash value ${o.hash}`);
+    if (this.supportsOption('Threads')) cmds.push(`setoption name Threads value ${o.threads}`);
+    if (this.supportsOption('Skill Level')) cmds.push(`setoption name Skill Level value ${o.skillLevel}`);
+    if (this.supportsOption('Use NNUE')) cmds.push(`setoption name Use NNUE value ${o.useNNUE}`);
+    if (this.supportsOption('UCI_LimitStrength')) {
+      cmds.push(`setoption name UCI_LimitStrength value ${o.limitStrength}`);
+      if (o.limitStrength && this.supportsOption('UCI_Elo')) {
+        const elo = Math.max(UCI_ELO_MIN, Math.min(UCI_ELO_MAX, Math.round(o.uciElo)));
+        cmds.push(`setoption name UCI_Elo value ${elo}`);
+      }
     }
     return cmds;
   }
 
+  /** Push the current options to the worker. Callers must ensure the engine is
+   *  idle — UCI only allows `setoption` between searches. */
+  private flushOptions(): void {
+    this.pendingOptions = false;
+    if (!this.worker || !this.isReady) return;
+    for (const cmd of this.buildOptionCommands()) this.send(cmd);
+    this.sendIsReady({ tag: 'barrier' });
+  }
+
   /** Set tunable engine options live. Threads/Hash only take effect when the
-   *  engine is idle, so the caller (engineStore) stops before and restarts
-   *  after. Returns the resolved option set. */
+   *  engine is idle, so a push that arrives mid-search is deferred to the
+   *  terminating `bestmove` (engineStore stops first, so this is one search
+   *  away). Returns the resolved option set. */
   setOptions(partial: Partial<EngineOptions>): EngineOptions {
     this.options = { ...this.options, ...partial };
     if (this.worker && this.isReady) {
-      for (const cmd of this.buildOptionCommands()) this.send(cmd);
-      this.sendIsReady({ tag: 'barrier' });
+      if (this.isSearching) this.pendingOptions = true;
+      else this.flushOptions();
     }
     return { ...this.options };
   }
@@ -256,6 +328,8 @@ export class EngineManager {
         this.isSearching = false;
         this.current = null;
         this.queued = null;
+        this.pendingOptions = false;
+        this.wedgeStopAt = null;
         // Resolve + drop any pending isready barriers / beginSession markers so
         // their awaiters don't hang, and the FIFO can't desync into the next
         // engine's searches (a stale 'session' marker would otherwise be shifted
@@ -292,10 +366,17 @@ export class EngineManager {
           // Apply the current tunable options (defaults unless setOptions ran
           // before load). UCI_AnalyseMode stays on for analysis-quality search;
           // UCI_ShowWDL adds a `wdl W D L` triple to score-bearing info lines
-          // (display-only). isReady is now true so we can use send().
+          // (display-only). Both are gated on the build actually having them —
+          // the sf17/sf18 lite builds answer UCI_AnalyseMode with `No such
+          // option`. isReady is now true so we can use send().
+          this.pendingOptions = false;
           for (const cmd of this.buildOptionCommands()) this.send(cmd);
-          this.send('setoption name UCI_AnalyseMode value true');
-          this.send('setoption name UCI_ShowWDL value true');
+          if (this.supportsOption('UCI_AnalyseMode')) {
+            this.send('setoption name UCI_AnalyseMode value true');
+          }
+          if (this.supportsOption('UCI_ShowWDL')) {
+            this.send('setoption name UCI_ShowWDL value true');
+          }
           this.send('isready');
           return;
         }
@@ -351,6 +432,15 @@ export class EngineManager {
       e instanceof ErrorEvent && e.message
         ? `Worker crashed: ${e.message}`
         : 'Worker crashed';
+    this.failEngine(message);
+  }
+
+  /**
+   * Declare the worker dead. Shared by the crash path (handlePostLoadError) and
+   * the watchdog's wedge escalation: reject everything outstanding, tear the
+   * worker down, publish an error event for the UI, then self-heal.
+   */
+  private failEngine(message: string): void {
     const err = new Error(message);
 
     // Reject the in-flight evaluate() and any queued request so awaiters wake.
@@ -359,6 +449,8 @@ export class EngineManager {
     this.current = null;
     this.queued = null;
     this.isSearching = false;
+    this.pendingOptions = false;
+    this.wedgeStopAt = null;
     this.clearAnalysisTimer();
     try { cur?.reject?.(err); } catch (le) { console.error('[EngineManager] reject(current) failed', le); }
     try { q?.reject?.(err); } catch (le) { console.error('[EngineManager] reject(queued) failed', le); }
@@ -376,7 +468,7 @@ export class EngineManager {
 
     // Self-heal: reload the same engine version. Failures here are reported via
     // a second error event rather than thrown (no caller to catch them).
-    this.recover();
+    void this.recover().catch(() => { /* already surfaced as an error event */ });
   }
 
   /**
@@ -401,9 +493,26 @@ export class EngineManager {
   private startWatchdog(): void {
     if (this.watchdog !== null) return;
     this.watchdog = window.setInterval(() => {
-      if (this.isSearching && Date.now() - this.lastInfoTime > this.currentGraceMs) {
+      if (!this.isSearching) {
+        this.wedgeStopAt = null;
+        return;
+      }
+      if (Date.now() - this.lastInfoTime <= this.currentGraceMs) return;
+      if (this.wedgeStopAt === null) {
+        // First trip: assume the search is merely stuck and ask it to stop. A
+        // healthy engine answers with `bestmove` almost immediately.
         console.warn(`[EngineManager] watchdog: no info for ${this.currentGraceMs}ms, sending stop`);
+        this.wedgeStopAt = Date.now();
         this.send('stop');
+        return;
+      }
+      if (Date.now() - this.wedgeStopAt > WEDGE_ESCALATION_MS) {
+        // `stop` produced neither a new info line nor a bestmove — the WASM
+        // instance is wedged and will never terminate the search on its own.
+        // Escalate rather than reissuing stop forever: without this an awaiting
+        // evaluate() (review) hangs for the life of the page.
+        console.error('[EngineManager] watchdog: engine wedged after stop, terminating and reloading');
+        this.failEngine('Engine stopped responding — reloading');
       }
     }, 3000);
   }
@@ -457,9 +566,14 @@ export class EngineManager {
     }
     if (data.startsWith('info ')) {
       this.lastInfoTime = Date.now();
+      this.wedgeStopAt = null;
       this.resetAnalysisTimer();
       const parsed = parseInfoLine(data);
-      if (parsed && this.current && !this.current.aborted) {
+      // A `lowerbound`/`upperbound` score is a fail-high/fail-low signal from the
+      // aspiration window, not an evaluation. Recording it would let it become
+      // the reported eval for the search (and get pushed to the shared Mongo
+      // position cache), so the line is dropped and the last EXACT score stands.
+      if (parsed && parsed.bound === undefined && this.current && !this.current.aborted) {
         this.current.latestLines.set(parsed.multipv, parsed);
         this.publishEvent({ type: 'info', line: parsed });
       }
@@ -474,6 +588,7 @@ export class EngineManager {
 
       this.current = null;
       this.isSearching = false;
+      this.wedgeStopAt = null;
       this.clearAnalysisTimer();
 
       if (!wasAborted) {
@@ -494,6 +609,11 @@ export class EngineManager {
         cur.reject(new Error('Aborted'));
       }
 
+      // The engine is idle exactly here — the only legal moment to push option
+      // changes that arrived mid-search (Hash reallocates the TT, Threads
+      // respawns the pool). Must precede the queued search so it sees them.
+      if (this.pendingOptions) this.flushOptions();
+
       // Now check queue
       if (this.queued) {
         const q = this.queued;
@@ -503,20 +623,32 @@ export class EngineManager {
       return;
     }
     if (data.startsWith('error')) {
-      // A UCI `error` line aborts the current search: the engine will NOT emit a
-      // bestmove for it, so without terminating here the evaluate() promise and
-      // the queue would stall. Treat it like an aborted bestmove — reject the
-      // in-flight promise, clear search state, and start any queued request.
-      const cur = this.current;
-      this.current = null;
-      this.isSearching = false;
-      this.clearAnalysisTimer();
+      // A UCI `error` line does NOT guarantee the search was abandoned, and
+      // Stockfish ignores `position`/`go` while it is still searching — so
+      // clearing isSearching here would let the next analyze() start a search
+      // whose info/bestmove stream actually belongs to the previous position.
+      // Instead: reject the in-flight promise with the error (so no awaiter
+      // hangs), mark the request aborted, and send a real `stop`. The resulting
+      // `bestmove` remains the single search terminator and starts the queue.
       this.publishEvent({ type: 'error', message: data });
-      try { cur?.reject?.(new Error(data)); } catch (le) { console.error('[EngineManager] reject on error line failed', le); }
-      if (this.queued) {
-        const q = this.queued;
-        this.queued = null;
-        this.startSearch(q.req, q.resolve, q.reject);
+      const cur = this.current;
+      if (cur) {
+        cur.aborted = true;
+        try { cur.reject?.(new Error(data)); } catch (le) { console.error('[EngineManager] reject on error line failed', le); }
+        cur.resolve = undefined;
+        cur.reject = undefined;
+      }
+      if (this.isSearching) {
+        this.send('stop');
+      } else {
+        // Not searching: nothing will arrive to terminate, so drain here.
+        this.current = null;
+        this.clearAnalysisTimer();
+        if (this.queued) {
+          const q = this.queued;
+          this.queued = null;
+          this.startSearch(q.req, q.resolve, q.reject);
+        }
       }
     }
   }
@@ -545,6 +677,7 @@ export class EngineManager {
     this.isSearching = true;
     this.currentGraceMs = infoGapGraceMs(req);
     this.lastInfoTime = Date.now();
+    this.wedgeStopAt = null;
     this.clearAnalysisTimer();
     this.resetAnalysisTimer();
     // Lichess-pattern UCI sequence:
@@ -640,13 +773,32 @@ export class EngineManager {
     this.clearAnalysisTimer();
   }
 
+  /**
+   * Kill the worker. Unlike abort() this is terminal — nothing will ever answer
+   * the outstanding requests, so they MUST be rejected rather than dropped:
+   * engineStore.initEngine terminates the previous manager as its first act, and
+   * a review's `await evaluate()` that is merely abandoned parks forever, which
+   * pins reviewStore in phase 'analyzing' and suppresses live analysis for the
+   * rest of the session. Mirrors handlePostLoadError's reject-then-teardown.
+   */
   terminate(): void {
+    const err = new Error('Engine terminated');
+    const cur = this.current;
+    const q = this.queued;
+    this.current = null;
+    this.queued = null;
+    try { cur?.reject?.(err); } catch (le) { console.error('[EngineManager] reject(current) failed', le); }
+    try { q?.reject?.(err); } catch (le) { console.error('[EngineManager] reject(queued) failed', le); }
     try { this.worker?.terminate(); } catch {}
     this.worker = null;
     this.isReady = false;
     this.isSearching = false;
-    this.current = null;
-    this.queued = null;
+    this.pendingOptions = false;
+    this.wedgeStopAt = null;
+    // Same FIFO-desync hazard loadEngine guards against: a leftover 'session'
+    // marker would be shifted by a later engine's first readyok.
+    for (const m of this.readyokQueue) m.resolve?.();
+    this.readyokQueue = [];
     this.clearTimers();
   }
 
@@ -688,8 +840,22 @@ export class EngineManager {
 
 // ─── UCI parsing helper ──────────────────────────────────────────
 
-function parseInfoLine(message: string): SearchInfoLine | null {
+/**
+ * Parse one `info` line into a SearchInfoLine.
+ *
+ * Returns `null` for lines that must NOT reach the per-multipv line map:
+ * - `info string …` (NNUE banners, tablebase notes) — these carry no multipv,
+ *   so a permissive parse would default to multipv 1 and overwrite the real
+ *   PV-1 entry with a `{cp: null, mate: null, depth: 0, pv: []}` stub.
+ * - periodic progress lines (`info nodes … nps … time …`, `info … currmove …`)
+ *   which carry neither a score nor a pv, for the same reason.
+ *
+ * Bound scores ARE returned, flagged via `bound`, so the caller can distinguish
+ * them from exact evaluations rather than silently discarding the whole line.
+ */
+export function parseInfoLine(message: string): SearchInfoLine | null {
   if (!message.startsWith('info ')) return null;
+  if (message.startsWith('info string')) return null;
   const tokens = message.slice(5).split(/\s+/).filter(Boolean);
   let depth = 0;
   let multipv = 1;
@@ -699,6 +865,7 @@ function parseInfoLine(message: string): SearchInfoLine | null {
   let nps: number | undefined;
   let hashfull: number | undefined;
   let wdl: WDL | undefined;
+  let bound: 'lower' | 'upper' | undefined;
   let i = 0;
   while (i < tokens.length) {
     const tok = tokens[i];
@@ -712,8 +879,9 @@ function parseInfoLine(message: string): SearchInfoLine | null {
         const val = parseInt(tokens[++i], 10);
         if (type === 'cp') cp = val;
         else if (type === 'mate') mate = val;
-        // Skip lowerbound/upperbound markers
-        if (tokens[i + 1] === 'lowerbound' || tokens[i + 1] === 'upperbound') i++;
+        // Record (and step over) a lowerbound/upperbound marker.
+        if (tokens[i + 1] === 'lowerbound') { bound = 'lower'; i++; }
+        else if (tokens[i + 1] === 'upperbound') { bound = 'upper'; i++; }
         i++;
         break;
       }
@@ -732,5 +900,6 @@ function parseInfoLine(message: string): SearchInfoLine | null {
       default: i++;
     }
   }
-  return { multipv, cp, mate, depth, pv, nps, hashfull, wdl };
+  if (cp === null && mate === null && pv.length === 0) return null;
+  return { multipv, cp, mate, depth, pv, nps, hashfull, wdl, bound };
 }

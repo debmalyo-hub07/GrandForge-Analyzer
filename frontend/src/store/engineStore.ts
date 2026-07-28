@@ -5,6 +5,7 @@ import { Chess } from 'chess.js';
 import {
   EngineManager,
   ENGINE_CONFIGS,
+  isMultiThreadingAvailable,
   type EngineVersion,
   type SearchInfoLine,
   type EngineOptions,
@@ -12,6 +13,7 @@ import {
   DEFAULT_ENGINE_OPTIONS,
 } from '../services/EngineManager';
 import { useReviewStore } from './reviewStore';
+import { useUIStore } from './uiStore';
 import { GameEngineAdapter, type IndexedGame } from '../services/GameEngineAdapter';
 import { formatEval } from '../utils/parseUCI';
 
@@ -53,9 +55,13 @@ interface EngineState {
   bestMoveUci: string | null;
   currentFen: string;
   analyzedFen: string | null;
+  /** Last engine load/runtime failure, for the retryable banner in
+   *  EngineControls. Null while healthy. Runtime-only — never persisted. */
+  engineError: string | null;
 
   initEngine: (version?: EngineVersion) => Promise<EngineManager>;
   switchEngine: (version: EngineVersion) => Promise<void>;
+  retryEngineInit: () => Promise<void>;
   startAnalysis: (fen: string) => void;
   startIndexedAnalysis: (game: IndexedGame, ply: number) => void;
   stopAnalysis: () => void;
@@ -93,6 +99,13 @@ const MIN_RENDER_DEPTH = 4;
 // thousands. On overflow we evict the oldest insertion (Map preserves order).
 const SAN_CACHE_MAX = 2000;
 const sanCache = new Map<string, string[]>();
+
+// The lines panel renders at most 7 SAN moves per PV (EngineLines), but a deep
+// PV can be 40+ plies — converting all of them means replaying 40 chess.js moves
+// per info line per multipv. Cap the conversion just past what is displayed;
+// this also collapses the cache key to a stable 8-ply prefix, so a deepening
+// search reuses entries instead of minting a new one every depth.
+const MAX_SAN_PLIES = 8;
 
 function sanCacheSet(key: string, value: string[]): void {
   if (sanCache.size >= SAN_CACHE_MAX) {
@@ -166,6 +179,7 @@ export const useEngineStore = create<EngineState>()(
   bestMoveUci: null,
   currentFen: STARTPOS,
   analyzedFen: null,
+  engineError: null,
 
   initEngine: async (version) => {
     const myGeneration = ++engineInitGeneration;
@@ -174,12 +188,33 @@ export const useEngineStore = create<EngineState>()(
       existing.terminate();
       set({ manager: null, adapter: null });
     }
+    // state-audit S4: `computerAnalysis` (uiStore) IS persisted while `isEnabled`
+    // is not, so a user who turned analysis off and reloaded would get
+    // isEnabled=true and an invisible `go infinite` pinning a core while every
+    // UI affordance reads "off". Reconcile once, here, before anything can
+    // start a search — the persisted flag wins.
+    try {
+      const computerAnalysis = useUIStore.getState().computerAnalysis;
+      if (computerAnalysis !== get().isEnabled) set({ isEnabled: computerAnalysis });
+    } catch { /* uiStore unavailable (tests) — leave isEnabled as-is */ }
     const requested = version ?? get().engineVersion;
     // Fall back if a stale persisted/profile value names a removed engine (e.g.
     // the dropped 'sf18-full'): ENGINE_CONFIGS[bad].file would throw on load,
     // crashing the whole analysis UI with no recovery but clearing localStorage.
-    const target: EngineVersion = ENGINE_CONFIGS[requested] ? requested : 'sf18-lite';
-    set({ isLoading: true });
+    let target: EngineVersion = ENGINE_CONFIGS[requested] ? requested : 'sf18-lite';
+    // Multi-threading preflight (engine-audit S2). The MT worker requests a
+    // shared WebAssembly.Memory and aborts during module init without
+    // SharedArrayBuffer, which needs cross-origin isolation. The selector
+    // already disables the option, but headers can be stripped by a proxy or an
+    // extension — degrade to the single-threaded build with a notice instead of
+    // letting the worker throw.
+    let notice: string | null = null;
+    if (ENGINE_CONFIGS[target].multiThreaded && !isMultiThreadingAvailable()) {
+      notice =
+        'Multi-threading needs cross-origin isolation, which this page does not have. Loaded single-threaded Stockfish 18 instead.';
+      target = 'sf18-lite';
+    }
+    set({ isLoading: true, engineError: null });
     const manager = new EngineManager();
     // Apply persisted/tunable options BEFORE load so uciok picks them up.
     // Merge over defaults so a pre-v2 persisted engineSettings (missing
@@ -187,6 +222,10 @@ export const useEngineStore = create<EngineState>()(
     manager.setOptions({ ...DEFAULT_ENGINE_OPTIONS, ...get().engineSettings });
 
     // Subscribe to full engine event stream
+    // True while a runtime error is being self-healed by EngineManager.recover().
+    // Load failures and the MT-fallback notice must survive until the user acts,
+    // so only errors raised by this manager's own event stream auto-clear.
+    let selfHealing = false;
     manager.subscribe((event) => {
       if (event.type === 'info') {
         const info = event.line;
@@ -209,7 +248,7 @@ export const useEngineStore = create<EngineState>()(
                 : undefined,
             turn as 'w' | 'b',
           );
-          const sanMoves = convertUciToSan(currentFen, info.pv);
+          const sanMoves = convertUciToSan(currentFen, info.pv.slice(0, MAX_SAN_PLIES));
           const rawCpForLine = info.cp !== null ? (turn === 'b' ? -info.cp : info.cp) : null;
           const mateForLine = info.mate !== null ? (turn === 'b' ? -info.mate : info.mate) : null;
           const moveColor: 'white' | 'black' | 'equal' = evalStr.startsWith('-')
@@ -267,10 +306,39 @@ export const useEngineStore = create<EngineState>()(
         }
       } else if (event.type === 'bestmove') {
         set({ isRunning: false, bestMoveUci: event.bestMoveUci || get().bestMoveUci });
+      } else if (event.type === 'error') {
+        // Worker crash, wedge escalation, or a UCI error line. Surface it so the
+        // user gets a retryable banner instead of a silently dead engine.
+        selfHealing = true;
+        set({ isRunning: false, engineError: event.message });
+      } else if (event.type === 'ready') {
+        // A readyok after an error proves recover() worked — drop the banner.
+        if (selfHealing) {
+          selfHealing = false;
+          if (get().engineError !== null) set({ engineError: null });
+        }
       }
     });
 
-    await manager.loadEngine(target);
+    try {
+      await manager.loadEngine(target);
+    } catch (err) {
+      // Without this the store keeps isLoading:true forever (the engine dropdown
+      // stays disabled) and manager:null, with no error anywhere in the UI — a
+      // permanent brick recoverable only by a page reload. Only the newest
+      // generation may publish state; an older superseded call stays quiet.
+      manager.terminate();
+      if (myGeneration === engineInitGeneration) {
+        set({
+          isLoading: false,
+          manager: null,
+          adapter: null,
+          isRunning: false,
+          engineError: err instanceof Error ? err.message : 'Failed to load engine',
+        });
+      }
+      throw err;
+    }
     if (myGeneration !== engineInitGeneration) {
       // A newer initEngine() superseded this one while it was loading. Discard
       // this (now-orphaned) manager instead of writing it to the store, so the
@@ -279,7 +347,7 @@ export const useEngineStore = create<EngineState>()(
       return manager;
     }
     const adapter = new GameEngineAdapter(manager);
-    set({ manager, adapter, engineVersion: target, isLoading: false });
+    set({ manager, adapter, engineVersion: target, isLoading: false, engineError: notice });
     return manager;
   },
 
@@ -291,10 +359,31 @@ export const useEngineStore = create<EngineState>()(
     // guard and can leave the store pointing at a terminated worker — after which
     // every analyze() silently no-ops (send() early-returns when !isReady).
     set({ lines: [], currentDepth: 0, bestMoveUci: null, isRunning: false });
-    await get().initEngine(version);
+    try {
+      await get().initEngine(version);
+    } catch {
+      // initEngine already published engineError + cleared isLoading. Swallow so
+      // the selector's `await switchEngine(v)` isn't an unhandled rejection, and
+      // keep the previously selected engineVersion so Retry targets something real.
+      return;
+    }
     if (isEnabled && currentFen) {
       get().startAnalysis(currentFen);
     }
+  },
+
+  /** Retry a failed engine load (the banner's Retry button). Clears the error,
+   *  re-runs initEngine for the currently selected version, and resumes live
+   *  analysis on success. Never throws — failures land back in engineError. */
+  retryEngineInit: async () => {
+    set({ engineError: null });
+    try {
+      await get().initEngine(get().engineVersion);
+    } catch {
+      return;
+    }
+    const { isEnabled, currentFen } = get();
+    if (isEnabled && currentFen) get().startAnalysis(currentFen);
   },
 
   startAnalysis: (fen) => {
@@ -452,22 +541,30 @@ export const useEngineStore = create<EngineState>()(
     }),
     {
       name: 'grandforge-engine',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       // v1→v2 added limitStrength/uciElo to engineSettings. Old payloads lack
       // them; merge over defaults so buildOptionCommands never emits
       // `UCI_LimitStrength value undefined` on hydrate.
+      // v3→v4 normalizes engineVersion: a blob naming a removed engine (the
+      // dropped 'sf18-full') crashed EngineVersionSelector during render —
+      // before initEngine's own fallback could ever run — so the page was
+      // permanently broken for anyone who had it selected. Sanitize at hydrate.
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Record<string, unknown>;
         if (fromVersion < 2 && p.engineSettings && typeof p.engineSettings === 'object') {
           p.engineSettings = { ...DEFAULT_ENGINE_OPTIONS, ...(p.engineSettings as object) };
         }
+        const v = p.engineVersion;
+        if (typeof v !== 'string' || !(v in ENGINE_CONFIGS)) {
+          p.engineVersion = 'sf18-lite';
+        }
         p.moveTimeMs = null;
         p.infiniteMode = true;
         return p as unknown as EngineState;
       },
-      // Persist only serializable tuning prefs. manager/adapter/lines/eval are
-      // runtime-only and must never be written to storage.
+      // Persist only serializable tuning prefs. manager/adapter/lines/eval and
+      // engineError are runtime-only and must never be written to storage.
       partialize: (state) => ({
         engineVersion: state.engineVersion,
         depth: state.depth,
