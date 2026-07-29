@@ -10,7 +10,15 @@ export default defineConfig({
     // Vite `root` is frontend/, but tests span frontend + backend — scan from
     // the repo root instead.
     dir: path.resolve(__dirname),
-    include: ['frontend/src/**/*.{test,spec}.ts', 'backend/**/*.{test,spec}.ts'],
+    include: [
+      'frontend/src/**/*.{test,spec}.ts',
+      'backend/**/*.{test,spec}.ts',
+      // The explorer ingest pipeline (scripts/explorer/**) is pure logic — PGN
+      // tokenizing, trie merging, FEN resolution — and it runs once, offline,
+      // against gigabytes of input. It is exactly the code that must be right
+      // the first time, so its units are covered here.
+      'scripts/**/*.{test,spec}.ts',
+    ],
     // Exclude the WASM worker glue — those need a browser, covered by Playwright.
     exclude: ['node_modules/**', 'dist/**', 'frontend/src/**/*.browser.test.ts'],
   },

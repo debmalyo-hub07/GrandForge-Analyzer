@@ -1,13 +1,15 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 /**
- * Opening — ECO + transposition lookup record + lila-openingexplorer-shaped
- * aggregate statistics.
+ * Opening — ECO name + transposition lookup record, plus per-opening aggregate
+ * statistics and own-authored theory prose (`description`).
  *
- * Schema compatibility note: `white`, `black`, `draws` aggregates and
- * `topGames` cache mirror the lila-openingexplorer response shape so future
- * sync jobs can ingest Lichess data dumps without remapping. See
- * https://github.com/lichess-org/lila-openingexplorer for the upstream schema.
+ * Scope note: this collection is the ECO *book* — it answers "what is this line
+ * called, and what should a player know about it". Per-position game statistics
+ * (counts, W/D/L, top games) live in `ExplorerNode`, keyed by normalized FEN and
+ * built by `scripts/ingestExplorer.ts`. The `white`/`black`/`draws`/`topGames`
+ * fields here predate that split and are seeded per-opening; new statistics work
+ * belongs in `ExplorerNode`, which merges transpositions correctly.
  */
 
 export interface IOpeningTopGame {
@@ -31,7 +33,19 @@ export interface IOpening extends Document {
   moveSequence: string;
   plyDepth: number;
 
-  // ── lila-openingexplorer aggregate stats ──────────────────────────────
+  /**
+   * Own-authored theory prose for this opening, shown in the Explore panel above
+   * the statistics (design decision D2). Seeded by
+   * `scripts/seedOpeningTheory.ts` from `scripts/data/openingTheory.ts`, which is
+   * the reviewable source of truth — absent for the long tail of openings, where
+   * the panel shows the ECO name and statistics alone.
+   *
+   * This text is written for GrandForge. Nothing is copied from, or derived
+   * from, another platform's opening articles.
+   */
+  description?: string;
+
+  // ── Aggregate stats ───────────────────────────────────────────────────
   white: number;             // master/lichess games where white won
   black: number;             // games where black won
   draws: number;             // drawn games
@@ -76,6 +90,10 @@ const OpeningSchema = new Schema<IOpening>({
   fen:          { type: String, required: true },
   moveSequence: { type: String, required: true, index: true },
   plyDepth:     { type: Number, required: true, default: 0 },
+
+  // Bounded so a bad seed run can't push arbitrarily large prose into a
+  // collection that is otherwise a few hundred bytes per row.
+  description:  { type: String, maxlength: 2000 },
 
   white:         { type: Number, default: 0 },
   black:         { type: Number, default: 0 },

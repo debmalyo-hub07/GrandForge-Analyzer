@@ -25,6 +25,7 @@ import authPreferences from './routes/auth/preferences';
 import authRegister from './routes/auth/register';
 import engineIndexMigrate from './routes/engine-index/migrate';
 import engineIndexStatus from './routes/engine-index/status';
+import explorerLookup from './routes/explorer/lookup';
 import gamesById from './routes/games/[id]';
 import gamesIndex from './routes/games/index';
 import gamesUpload from './routes/games/upload';
@@ -142,6 +143,7 @@ export const routes: Array<[RegExp, any]> = [
   [/^\/api\/auth\/register\/?$/, authRegister],
   [/^\/api\/engine-index\/migrate\/?$/, engineIndexMigrate],
   [/^\/api\/engine-index\/status\/?$/, engineIndexStatus],
+  [/^\/api\/explorer\/lookup\/?$/, explorerLookup],
   [/^\/api\/games\/upload\/?$/, gamesUpload],
   [/^\/api\/games\/[^/]+\/?$/, gamesById],
   [/^\/api\/games\/?$/, gamesIndex],

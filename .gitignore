@@ -70,3 +70,10 @@ coverage/
 
 # Local UX-tour screenshots (not distributed)
 .ux-tour/
+
+# Opening-explorer ingest state: NDJSON checkpoints of a multi-GB PGN corpus,
+# plus any corpus left sitting in the repo. Operator-local, sometimes hundreds
+# of MB, and reproducible from the source files (docs/explorer-ingest.md).
+.explorer-ingest/
+/corpus/
+*.pgn

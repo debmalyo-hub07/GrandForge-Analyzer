@@ -35,6 +35,9 @@ describe('rate limit tiers', () => {
     ['routes/openings/lookup.ts', 'browse'],
     ['routes/openings/tree.ts', 'browse'],
     ['routes/master/games.ts', 'browse'],
+    // Explorer browsing is one point read per board move — same cost profile as
+    // the opening book it sits next to in the panel.
+    ['routes/explorer/lookup.ts', 'browse'],
     // Abuse controls, not capacity limits: the brute-force surface and the
     // routes that spend a third-party API call on our behalf.
     ['routes/auth/login.ts', 'strict'],
