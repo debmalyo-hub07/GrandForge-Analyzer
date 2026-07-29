@@ -1,18 +1,20 @@
 // src/components/import/ImportTab.tsx
 import { useState } from 'react';
-import { Globe, FileText, Hash, Download } from 'lucide-react';
+import { Globe, FileText, Hash, Download, Share2 } from 'lucide-react';
 import Tabs, { type TabItem } from '../ui/Tabs';
 import { UsernameImport } from './UsernameImport';
 import { PGNImport } from './PGNImport';
 import { FENImport } from './FENImport';
 import { PGNExport } from './PGNExport';
+import { ShareLink } from './ShareLink';
 
-type ImportSubTab = 'online' | 'pgn' | 'fen' | 'export';
+type ImportSubTab = 'online' | 'pgn' | 'fen' | 'share' | 'export';
 
 const TABS: TabItem[] = [
   { id: 'online', label: 'Online', icon: <Globe size={14} /> },
   { id: 'pgn', label: 'PGN', icon: <FileText size={14} /> },
   { id: 'fen', label: 'FEN', icon: <Hash size={14} /> },
+  { id: 'share', label: 'Share', icon: <Share2 size={14} /> },
   { id: 'export', label: 'Export', icon: <Download size={14} /> },
 ];
 
@@ -40,6 +42,7 @@ export function ImportTab() {
         {active === 'online' && <UsernameImport />}
         {active === 'pgn' && <PGNImport />}
         {active === 'fen' && <FENImport />}
+        {active === 'share' && <ShareLink />}
         {active === 'export' && <PGNExport />}
       </div>
     </div>

@@ -23,6 +23,7 @@ import Spinner from '../components/ui/Spinner';
 import { useStockfish } from '../hooks/useStockfish';
 import { useOpeningDetect } from '../hooks/useOpeningDetect';
 import { useReviewPlayback } from '../hooks/useReviewPlayback';
+import { useShareParams } from '../hooks/useShareParams';
 import { useGameStore } from '../store/gameStore';
 import { useUIStore } from '../store/uiStore';
 import { games as gamesApi } from '../services/apiClient';
@@ -59,6 +60,9 @@ export function AnalyzerPage() {
   // Drive opening detection and review playback side-effects while the page is mounted.
   useOpeningDetect();
   useReviewPlayback();
+  // A shared ?pgn= / ?fen= link seeds the board. Skipped on /game/:id, where the
+  // stored game is being fetched and would race the URL position.
+  useShareParams({ enabled: !id });
 
   const loadIndexedGame = useGameStore((s) => s.loadIndexedGame);
   const gameMetadata = useGameStore((s) => s.gameMetadata);
