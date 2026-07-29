@@ -189,8 +189,13 @@ main {
   .analyzer-layout {
     grid-template-columns: 32px 1fr;
   }
-  .side-panel {
+  /* The grid children are the *-slot wrappers in AnalyzerLayout. `.side-panel`
+     is a div INSIDE SidePanel, so placing it here does nothing — the panel then
+     auto-placed into row 2 / column 1, i.e. the 32px eval-bar column. */
+  .side-panel-slot {
     grid-column: 1 / -1;
+  }
+  .side-panel {
     max-height: none;
   }
 }
@@ -740,8 +745,12 @@ main {
     padding: 12px;
     max-width: none;
   }
-  .side-panel {
+  /* Same fix as the copy above — target the slot, not the inner div. Keep the
+     two in step: this block is a refinement of that one, not a replacement. */
+  .side-panel-slot {
     grid-column: 1 / -1;
+  }
+  .side-panel {
     max-height: none;
     min-height: 360px;
   }
