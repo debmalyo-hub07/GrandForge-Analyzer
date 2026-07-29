@@ -420,3 +420,5 @@ export function ReviewTab() {
     </MotionConfig>
   );
 }
+
+export default ReviewTab;

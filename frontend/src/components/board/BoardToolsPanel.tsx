@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeftRight, Pencil, Scissors, Clipboard, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGameStore } from '../../store/gameStore';
 import Slider from '../ui/Slider';
-import { BoardEditor } from './BoardEditor';
+
+// The board editor is a whole second board with a piece palette, opened from one
+// button most sessions never touch. Lazy keeps it out of the first paint; there
+// is no fallback because `editorOpen` only flips on a click, so a frame of
+// nothing is the same as the panel not being open yet.
+const BoardEditor = lazy(() => import('./BoardEditor'));
 
 interface ToggleProps {
   label: string;
@@ -241,15 +246,17 @@ export function BoardToolsPanel({ onClose }: BoardToolsPanelProps) {
       </motion.div>
 
       {editorOpen && (
-        <BoardEditor
-          initialFen={currentFen}
-          onClose={() => setEditorOpen(false)}
-          onConfirm={(fen) => {
-            loadFEN(fen);
-            setEditorOpen(false);
-            onClose();
-          }}
-        />
+        <Suspense fallback={null}>
+          <BoardEditor
+            initialFen={currentFen}
+            onClose={() => setEditorOpen(false)}
+            onConfirm={(fen) => {
+              loadFEN(fen);
+              setEditorOpen(false);
+              onClose();
+            }}
+          />
+        </Suspense>
       )}
     </>
   );

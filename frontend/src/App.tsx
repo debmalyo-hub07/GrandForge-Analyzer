@@ -1,10 +1,23 @@
-import { Component, type ReactNode } from 'react';
+import { Component, Suspense, lazy, type ReactNode } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import AnalyzerPage from './pages/AnalyzerPage';
-import NotFoundPage from './pages/NotFoundPage';
-import PrivacyPage from './pages/PrivacyPage';
-import LearnAccuracyPage from './pages/LearnAccuracyPage';
-import LearnClassificationsPage from './pages/LearnClassificationsPage';
+import Spinner from './components/ui/Spinner';
+
+// The analyzer is the entry point for ~every visit, so it stays in the main
+// chunk. The content routes are SEO landing pages a given visitor mostly never
+// opens — lazy so their prose never rides along in the first paint.
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const LearnAccuracyPage = lazy(() => import('./pages/LearnAccuracyPage'));
+const LearnClassificationsPage = lazy(() => import('./pages/LearnClassificationsPage'));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
+      <Spinner size="lg" label="Loading page" />
+    </div>
+  );
+}
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -81,10 +94,38 @@ export default function App() {
             </ErrorBoundary>
           }
         />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/learn/chess-accuracy" element={<LearnAccuracyPage />} />
-        <Route path="/learn/move-classifications" element={<LearnClassificationsPage />} />
-        <Route path="*" element={<NotFoundPage />} />
+        <Route
+          path="/privacy"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <PrivacyPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/learn/chess-accuracy"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <LearnAccuracyPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/learn/move-classifications"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <LearnClassificationsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <NotFoundPage />
+            </Suspense>
+          }
+        />
       </Routes>
     </ErrorBoundary>
   );

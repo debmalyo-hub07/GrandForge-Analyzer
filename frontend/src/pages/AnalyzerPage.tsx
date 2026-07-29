@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -19,9 +19,7 @@ import { EngineVersionSelector } from '../components/engine/EngineVersionSelecto
 import { OpeningBadge } from '../components/navigation/OpeningBadge';
 import { MoveList } from '../components/navigation/MoveList';
 import { NavigationControls } from '../components/navigation/NavigationControls';
-import { ReviewTab } from '../components/review/ReviewTab';
-import { ExplorePanel } from '../components/explorer/ExplorePanel';
-import { ImportTab } from '../components/import/ImportTab';
+import Spinner from '../components/ui/Spinner';
 import { useStockfish } from '../hooks/useStockfish';
 import { useOpeningDetect } from '../hooks/useOpeningDetect';
 import { useReviewPlayback } from '../hooks/useReviewPlayback';
@@ -29,6 +27,23 @@ import { useGameStore } from '../store/gameStore';
 import { useUIStore } from '../store/uiStore';
 import { games as gamesApi } from '../services/apiClient';
 import type { IndexedGame } from '../services/GameEngineAdapter';
+
+// SidePanel renders only the active tab, so these three subtrees never mount
+// until the user picks their tab. Lazy makes that saving real: the review suite
+// (summary card, eval graph, move list, blunder trainer), the explorer panel and
+// the import flow leave the first-paint bundle entirely. Analysis and Moves stay
+// eager — Analysis is the default tab.
+const ReviewTab = lazy(() => import('../components/review/ReviewTab'));
+const ExplorePanel = lazy(() => import('../components/explorer/ExplorePanel'));
+const ImportTab = lazy(() => import('../components/import/ImportTab'));
+
+function PanelFallback() {
+  return (
+    <div className="flex h-40 items-center justify-center">
+      <Spinner size="md" label="Loading panel" />
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // AnalyzerPage
@@ -176,9 +191,21 @@ export function AnalyzerPage() {
                   </div>
                 </div>
               }
-              explore={<ExplorePanel />}
-              review={<ReviewTab />}
-              importPanel={<ImportTab />}
+              explore={
+                <Suspense fallback={<PanelFallback />}>
+                  <ExplorePanel />
+                </Suspense>
+              }
+              review={
+                <Suspense fallback={<PanelFallback />}>
+                  <ReviewTab />
+                </Suspense>
+              }
+              importPanel={
+                <Suspense fallback={<PanelFallback />}>
+                  <ImportTab />
+                </Suspense>
+              }
             />
           }
         />
