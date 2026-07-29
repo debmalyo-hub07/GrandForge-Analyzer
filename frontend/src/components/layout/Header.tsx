@@ -1,10 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, lazy, useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Moon, Sun, ChevronDown } from 'lucide-react';
+import { Moon, Sun, ChevronDown, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useUIStore } from '../../store/uiStore';
 import { useEngineStore } from '../../store/engineStore';
 import { ENGINE_CONFIGS, type EngineVersion } from '../../services/EngineManager';
+
+// The Settings modal is heavy (three tabs, all controls). Lazy so it never
+// rides along in the first paint — it only mounts when the user opens it.
+const SettingsModal = lazy(() => import('./SettingsModal'));
 
 function EngineVersionSelector() {
   const engineVersion = useEngineStore((s) => s.engineVersion);
@@ -114,6 +118,35 @@ function ThemeToggleButton() {
   );
 }
 
+function SettingsButton() {
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        title="Settings"
+        aria-label="Open settings"
+        aria-haspopup="dialog"
+        aria-expanded={settingsOpen}
+        data-testid="open-settings"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+      >
+        <Settings size={16} />
+      </button>
+      {/* Mount only while open so the chunk is fetched on first use, and the
+          modal's focus trap / body-scroll lock never run on a closed dialog. */}
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsModal />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
 export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[var(--border)] bg-[var(--bg-base)]/95 backdrop-blur-md">
@@ -139,6 +172,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <EngineVersionSelector />
+          <SettingsButton />
           <ThemeToggleButton />
         </div>
       </div>

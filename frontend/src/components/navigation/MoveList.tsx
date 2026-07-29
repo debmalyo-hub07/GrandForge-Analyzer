@@ -76,6 +76,7 @@ export function MoveList() {
   const currentNodeId = useGameStore((s) => s.currentNodeId);
   const variationOpacity = useUIStore((s) => s.variationOpacity);
   const disclosureButtons = useUIStore((s) => s.disclosureButtons);
+  const inlineNotation = useUIStore((s) => s.inlineNotation);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +100,14 @@ export function MoveList() {
   }, [currentNodeId]);
 
   const variationStyle = { opacity: Math.max(0, Math.min(100, variationOpacity)) / 100 };
+
+  // Two ways to show side lines. Block (default) stacks each variation on its own
+  // indented row behind a rule — easy to scan when a position has several
+  // branches. Inline runs them on in parentheses the way printed notation does,
+  // which is denser and keeps the mainline pair on one line.
+  const variationsClass = inlineNotation
+    ? 'variations variations--inline ml-1 inline-flex flex-wrap items-baseline gap-x-1'
+    : 'variations variations--block mt-1 flex flex-col gap-0.5 pl-2 border-l-2 border-[var(--border)]';
 
   if (pairs.length === 0) {
     return (
@@ -131,15 +140,13 @@ export function MoveList() {
                   />
                 )}
                 {disclosureButtons && pair.whiteVariations.length > 0 && (
-                  <div
-                    className="variations mt-1 flex flex-col gap-0.5 pl-2 border-l-2 border-[var(--border)]"
-                    style={variationStyle}
-                  >
+                  <div className={variationsClass} style={variationStyle}>
                     {pair.whiteVariations.map((line, i) => (
                       <VariationLine
                         key={`wv-${pair.moveNumber}-${i}`}
                         line={line}
                         currentNodeId={currentNodeId}
+                        inline={inlineNotation}
                       />
                     ))}
                   </div>
@@ -156,15 +163,13 @@ export function MoveList() {
                   />
                 )}
                 {disclosureButtons && pair.blackVariations.length > 0 && (
-                  <div
-                    className="variations mt-1 flex flex-col gap-0.5 pl-2 border-l-2 border-[var(--border)]"
-                    style={variationStyle}
-                  >
+                  <div className={variationsClass} style={variationStyle}>
                     {pair.blackVariations.map((line, i) => (
                       <VariationLine
                         key={`bv-${pair.moveNumber}-${i}`}
                         line={line}
                         currentNodeId={currentNodeId}
+                        inline={inlineNotation}
                       />
                     ))}
                   </div>
@@ -181,22 +186,30 @@ export function MoveList() {
 function VariationLine({
   line,
   currentNodeId,
+  inline = false,
 }: {
   line: MoveNodeData[];
   currentNodeId: string | null;
+  inline?: boolean;
 }) {
   // ST-3: indent by MoveNode.depth (0 = mainline, +1 per nesting level). The
   // surrounding cell already renders the first variation level (border + pl-2),
   // so we add extra indentation only for deeper nesting (depth > 1) and let it
-  // scale linearly with depth.
+  // scale linearly with depth. Inline mode drops indentation entirely — nesting
+  // is carried by the parentheses instead, as in printed notation.
   const depth = line[0]?.depth ?? 1;
-  const extraIndentRem = Math.max(0, depth - 1) * 0.75;
+  const extraIndentRem = inline ? 0 : Math.max(0, depth - 1) * 0.75;
 
   return (
     <div
-      className="variation-line italic flex flex-wrap items-baseline gap-x-1 text-[var(--text-secondary)]"
+      className={`variation-line italic text-[var(--text-secondary)] ${
+        inline
+          ? 'inline-flex flex-wrap items-baseline gap-x-1'
+          : 'flex flex-wrap items-baseline gap-x-1'
+      }`}
       style={extraIndentRem > 0 ? { paddingLeft: `${extraIndentRem}rem` } : undefined}
     >
+      {inline && <span className="text-[var(--text-muted)]">(</span>}
       {line.map((node, idx) => {
         const showMoveNumber =
           idx === 0 || node.color === 'w';
@@ -218,6 +231,7 @@ function VariationLine({
           </span>
         );
       })}
+      {inline && <span className="text-[var(--text-muted)]">)</span>}
     </div>
   );
 }

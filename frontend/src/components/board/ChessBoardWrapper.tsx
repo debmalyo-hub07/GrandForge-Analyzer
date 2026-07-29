@@ -16,6 +16,11 @@ import { BoardArrowOverlay } from './BoardArrowOverlay';
 // re-running the library's arrow memo each render.
 const NO_ARROWS: [import('chess.js').Square, import('chess.js').Square, string?][] = [];
 
+// Stable empties for the `showLegalMoves: false` path — a fresh [] / new Set()
+// each render would defeat BoardMarkerOverlay's React.memo.
+const EMPTY_TARGETS: Square[] = [];
+const EMPTY_CAPTURES: Set<Square> = new Set();
+
 export interface ChessBoardWrapperProps {
   boardSize: number;
 }
@@ -27,6 +32,7 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
 
   const orientation = useUIStore((s) => s.orientation);
   const showCoordinates = useUIStore((s) => s.showCoordinates);
+  const showLegalMoves = useUIStore((s) => s.showLegalMoves);
   const highlightedSquares = useUIStore((s) => s.highlightedSquares);
   const boardTheme = useUIStore((s) => s.boardTheme);
   const pieceSet = useUIStore((s) => s.pieceSet);
@@ -338,10 +344,12 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
       animationDuration={200}
       promotionDialogVariant="modal"
       />
+      {/* `showLegalMoves` only hides the dots/rings — the selection ring stays so
+          click-to-move still shows which piece is picked up. */}
       <BoardMarkerOverlay
         selectedSquare={selectedSquare}
-        legalTargets={legalTargets}
-        captureTargets={captureTargets}
+        legalTargets={showLegalMoves ? legalTargets : EMPTY_TARGETS}
+        captureTargets={showLegalMoves ? captureTargets : EMPTY_CAPTURES}
         orientation={orientation}
       />
       <BoardArrowOverlay arrows={mergedArrows} orientation={orientation} />

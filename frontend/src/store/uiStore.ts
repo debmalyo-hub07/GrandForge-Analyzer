@@ -24,6 +24,8 @@ interface UIState {
   activeTab: SidePanelTabId;
   boardSize: number;
 
+  /** Unified Settings modal. Runtime-only — a reload should never reopen it. */
+  settingsOpen: boolean;
   boardToolsOpen: boolean;
   inlineNotation: boolean;
   disclosureButtons: boolean;
@@ -44,6 +46,8 @@ interface UIState {
   flipBoard: () => void;
   toggleTheme: () => void;
   setShowCoordinates: (v: boolean) => void;
+  setShowLegalMoves: (v: boolean) => void;
+  setTheme: (theme: 'dark' | 'light') => void;
   setBoardTheme: (theme: string) => void;
   setPieceSet: (set: string) => void;
   addArrow: (arrow: Arrow) => void;
@@ -53,6 +57,7 @@ interface UIState {
   clearHighlights: () => void;
   setActiveTab: (tab: SidePanelTabId) => void;
   updateBoardSize: (size: number) => void;
+  setSettingsOpen: (open: boolean) => void;
   setBoardToolsOpen: (open: boolean) => void;
   setInlineNotation: (v: boolean) => void;
   setDisclosureButtons: (v: boolean) => void;
@@ -102,6 +107,7 @@ export const useUIStore = create<UIState>()(
       activeTab: 'analysis',
       boardSize: 560,
 
+      settingsOpen: false,
       boardToolsOpen: false,
       inlineNotation: false,
       disclosureButtons: true,
@@ -121,6 +127,7 @@ export const useUIStore = create<UIState>()(
         set({ orientation: get().orientation === 'white' ? 'black' : 'white' }),
       toggleTheme: () =>
         set({ theme: get().theme === 'dark' ? 'light' : 'dark' }),
+      setTheme: (theme) => set({ theme }),
       setBoardTheme: (theme) => set({ boardTheme: theme }),
       setPieceSet: (s) => set({ pieceSet: s }),
       addArrow: (arrow) => set({ customArrows: [...get().customArrows, arrow] }),
@@ -135,7 +142,9 @@ export const useUIStore = create<UIState>()(
       clearHighlights: () => set({ highlightedSquares: new Set<Square>() }),
       setActiveTab: (tab) => set({ activeTab: tab }),
       setShowCoordinates: (v) => set({ showCoordinates: v }),
+      setShowLegalMoves: (v) => set({ showLegalMoves: v }),
       updateBoardSize: (size) => set({ boardSize: size }),
+      setSettingsOpen: (open) => set({ settingsOpen: open }),
       setBoardToolsOpen: (open) => set({ boardToolsOpen: open }),
       setInlineNotation: (v) => set({ inlineNotation: v }),
       setDisclosureButtons: (v) => set({ disclosureButtons: v }),
