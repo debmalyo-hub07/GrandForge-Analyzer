@@ -80,6 +80,12 @@ const moveReviewSchema = z.object({
   // review re-scores the ply as a genuine 0cp "Good" move — the same
   // strip-on-save class of bug as the `reviewedNodeIds` loss below.
   unscored: z.boolean().optional(),
+
+  // Where this ply's eval came from (shared cache / tablebase / local search).
+  // Informational only, but it must be declared for the same strip-on-save
+  // reason as `unscored`: a reloaded review would otherwise report every
+  // position as locally searched.
+  evalSource: z.enum(['cache', 'tablebase', 'engine']).optional(),
 });
 
 const phaseReviewSchema = z.object({

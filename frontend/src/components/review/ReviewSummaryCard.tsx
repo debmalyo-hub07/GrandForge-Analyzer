@@ -1,7 +1,9 @@
 ﻿// src/components/review/ReviewSummaryCard.tsx
 import { motion, MotionConfig } from 'framer-motion';
+import { Cloud } from 'lucide-react';
 import type { GameReviewResult, MoveClassification, RatingConfidence } from '../../types/review';
 import { readableTextColor } from '../../utils/boardUtils';
+import { summarizeEvalSources } from '../../utils/reviewUtils';
 
 const CLASSIFICATION_CONFIG: Record<
   MoveClassification,
@@ -96,6 +98,10 @@ function formatPhaseMeta(moveCount: number, avgCpl: number | null): string {
 }
 
 export function ReviewSummaryCard({ result }: { result: GameReviewResult }) {
+  // Only worth showing when something actually came for free. On a fresh
+  // deployment every position is a local search and this row stays hidden
+  // rather than reading as "0 of 78 — the cache is broken".
+  const sources = summarizeEvalSources(result.moveReviews);
   return (
     <MotionConfig reducedMotion="user">
       <motion.div
@@ -184,6 +190,22 @@ export function ReviewSummaryCard({ result }: { result: GameReviewResult }) {
           );
         })}
       </div>
+
+      {/* Eval provenance — where the numbers above came from */}
+      {sources.assisted > 0 && (
+        <div className="eval-source-row" title="Evaluations reused from previously analysed positions instead of being searched again on your device.">
+          <Cloud size={12} aria-hidden="true" />
+          <span>
+            {sources.cache > 0 && (
+              <>
+                {sources.cache} of {sources.total} positions from the shared cache
+              </>
+            )}
+            {sources.cache > 0 && sources.tablebase > 0 && ' · '}
+            {sources.tablebase > 0 && <>{sources.tablebase} solved exactly</>}
+          </span>
+        </div>
+      )}
     </motion.div>
     </MotionConfig>
   );

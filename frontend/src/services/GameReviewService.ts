@@ -500,6 +500,7 @@ export class GameReviewService {
               : Math.max(0, before.topMoveWin - before.secondMoveWin),
           reason,
           unscored: isPlyUnscored || undefined,
+          evalSource: before.source,
         });
 
         this.onProgress({

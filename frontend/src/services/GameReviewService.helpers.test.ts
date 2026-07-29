@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cachedLineToMoverWin, tbMoveScore } from './GameReviewService';
-import { MAX_CACHED_PV } from './positionCache';
+import { MAX_CACHED_PV, MIN_CACHE_DEPTH } from './positionCache';
 import { bookFensUpTo } from '../components/review/useOpeningBookFens';
 import { whiteCpAfter } from '../components/review/EvalGraph';
 import type { MoveReview } from '../types/review';
@@ -170,5 +170,19 @@ describe('MAX_CACHED_PV parity with the cache route', () => {
     const match = source.match(/\bpv:\s*z\.array\([\s\S]*?\.max\((\d+)\)/);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBe(MAX_CACHED_PV);
+  });
+});
+
+// Same failure mode in the other direction: `pushCachedEval` skips the request
+// below this depth to save a round trip, and the route 400s below it. If the
+// client's floor were the *lower* of the two, every write between the two values
+// would be sent and silently rejected; if it were higher, evals the cache would
+// have accepted are never offered.
+describe('MIN_CACHE_DEPTH parity with the guard module', () => {
+  it('matches MIN_CACHE_DEPTH in backend/positionCacheGuards.ts', () => {
+    const source = readFileSync(join(__dirname, '../../../backend/positionCacheGuards.ts'), 'utf8');
+    const match = source.match(/export const MIN_CACHE_DEPTH = (\d+)/);
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBe(MIN_CACHE_DEPTH);
   });
 });

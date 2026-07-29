@@ -10,6 +10,7 @@ import {
   netMaterialSacrifice,
   phaseSummary,
   playerAccuracy,
+  summarizeEvalSources,
 } from './reviewUtils';
 import type { MoveReview } from '../types/review';
 
@@ -563,5 +564,31 @@ describe('playerAccuracy', () => {
     expect(playerAccuracy(moves, 'white', 'w')).toBe(100);
     expect(playerAccuracy(sparse, 'white', 'w')).toBe(100);
     expect(playerAccuracy(sparse, 'black', 'w')).toBeLessThan(100);
+  });
+});
+
+describe('summarizeEvalSources', () => {
+  const template = fixtureMoves()[0];
+  const withSources = (sources: Array<MoveReview['evalSource']>): MoveReview[] =>
+    sources.map((evalSource, i) => ({ ...template, plyIndex: i, evalSource }));
+
+  it('counts each source and totals the assisted ones', () => {
+    const s = summarizeEvalSources(withSources(['cache', 'cache', 'tablebase', 'engine']));
+    expect(s).toMatchObject({ cache: 2, tablebase: 1, engine: 1, unknown: 0, assisted: 3, total: 4 });
+  });
+
+  it('reports nothing rather than everything for a review saved before the field existed', () => {
+    // Counting an absent source as `engine` would claim an old review did all its
+    // own work — plausible, unverifiable, and wrong for the ones that hit the cache.
+    const s = summarizeEvalSources(withSources([undefined, undefined]));
+    expect(s).toMatchObject({ unknown: 2, engine: 0, assisted: 0, total: 2 });
+  });
+
+  it('is empty-safe', () => {
+    expect(summarizeEvalSources([])).toMatchObject({ assisted: 0, total: 0 });
+  });
+
+  it('leaves the badge hidden when every position was searched locally', () => {
+    expect(summarizeEvalSources(withSources(['engine', 'engine'])).assisted).toBe(0);
   });
 });

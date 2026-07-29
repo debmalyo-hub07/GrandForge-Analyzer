@@ -811,3 +811,54 @@ export function isTruePieceSacrifice(fenBefore: string, playedUci: string): bool
   return netMaterialSacrifice(fenBefore, playedUci) >= 2;
 }
 
+
+/**
+ * How many of a review's positions were answered from the shared cache or the
+ * tablebase rather than by a local search.
+ *
+ * This exists so the UI can tell a user *why* a review was fast, which is the
+ * only visible payoff of the shared cache — the evals themselves are identical
+ * either way (a cached entry is a real search at the same engine and depth, and
+ * is only served once two independent submissions agree on it).
+ *
+ * Plies from before `evalSource` existed count as `unknown`, so an old saved
+ * review reports nothing rather than claiming every position was searched
+ * locally.
+ */
+export interface EvalSourceSummary {
+  cache: number;
+  tablebase: number;
+  engine: number;
+  unknown: number;
+  /** Positions answered without a local search — what the badge reports. */
+  assisted: number;
+  total: number;
+}
+
+export function summarizeEvalSources(moveReviews: MoveReview[]): EvalSourceSummary {
+  const summary: EvalSourceSummary = {
+    cache: 0,
+    tablebase: 0,
+    engine: 0,
+    unknown: 0,
+    assisted: 0,
+    total: moveReviews.length,
+  };
+  for (const move of moveReviews) {
+    switch (move.evalSource) {
+      case 'cache':
+        summary.cache += 1;
+        break;
+      case 'tablebase':
+        summary.tablebase += 1;
+        break;
+      case 'engine':
+        summary.engine += 1;
+        break;
+      default:
+        summary.unknown += 1;
+    }
+  }
+  summary.assisted = summary.cache + summary.tablebase;
+  return summary;
+}

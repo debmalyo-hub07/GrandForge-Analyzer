@@ -11,6 +11,16 @@ describe('rate limit tiers', () => {
     expect(RATE_LIMIT_TIERS.default).toBeGreaterThan(RATE_LIMIT_TIERS.strict);
   });
 
+  // Anonymous writes to the shared eval cache are the one path where the limit is
+  // a poisoning control, not a capacity one. It must sit below the read tier it
+  // shares a review with — otherwise a script gets the same budget as the reads
+  // an honest review depends on — while still clearing a couple of full games so
+  // a real reviewer never hits it.
+  it('keeps the cache-write budget below the read budget but above one game', () => {
+    expect(RATE_LIMIT_TIERS.contribute).toBeLessThan(RATE_LIMIT_TIERS.review);
+    expect(RATE_LIMIT_TIERS.contribute).toBeGreaterThan(200);
+  });
+
   // The whole reason the review tier exists: one review fires roughly one
   // positions/eval read per ply, and `moveReviews` is bounded at 600 plies, so a
   // budget at or below that 429s partway through a single long game — which
@@ -30,7 +40,9 @@ describe('rate limit tiers', () => {
 
   it.each([
     ['routes/positions/eval.ts', 'review'],
-    ['routes/positions/cache.ts', 'review'],
+    // Writes get their own, tighter bucket so a poisoning script can't 429 the
+    // reads a review depends on (backend-audit §3 guard 12).
+    ['routes/positions/cache.ts', 'contribute'],
     ['routes/positions/tablebase.ts', 'review'],
     ['routes/openings/lookup.ts', 'browse'],
     ['routes/openings/tree.ts', 'browse'],

@@ -12,6 +12,7 @@ import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import Position from '../../models/Position';
 import { ENGINE_VERSION_VALUES } from '../../zodSchemas';
+import { TRUST_THRESHOLD } from '../../positionCacheGuards';
 
 const app = createApp('review');
 
@@ -44,6 +45,14 @@ app.get('/api/positions/eval', async (req: Request, res: Response) => {
     const query: Record<string, unknown> = { fen };
     if (engine) query.engineVersion = engine;
     if (depth !== undefined) query.depth = { $gte: depth };
+    // Guard 9. Only serve an entry that at least two independent submissions
+    // agree on. Writes are anonymous (`positions/cache.ts`), so without this a
+    // single POST could hand every future reader of a position a wrong eval —
+    // silent, cross-user, and invisible in a finished review. Unconfirmed rows
+    // stay stored (they are what a second submission agrees *with*) but are never
+    // read. Rows predating this field have no value and so never match, which is
+    // the intended conservative default.
+    query.confirmations = { $gte: TRUST_THRESHOLD };
 
     // Bump `computedAt` on the hit, in the same round trip as the read: the
     // 60-day TTL on that field is what keeps `positions` from growing without
@@ -53,7 +62,17 @@ app.get('/api/positions/eval', async (req: Request, res: Response) => {
     const evaluation = await Position.findOneAndUpdate(
       query,
       { $set: { computedAt: new Date() } },
-      { sort: { depth: -1, computedAt: -1 }, new: true, lean: true }
+      {
+        sort: { depth: -1, computedAt: -1 },
+        new: true,
+        lean: true,
+        // Project explicitly. `contributors` holds salted contributor hashes and
+        // `challenger` holds a dissenting evaluation that deliberately isn't
+        // authoritative — neither belongs in a public response, and echoing the
+        // hashes back would hand an abuser a way to test whether their own writes
+        // are being recorded.
+        projection: 'fen engineVersion depth evaluation lines confirmations',
+      }
     ).exec();
 
     return res.status(200).json({ evaluation: evaluation ?? null });

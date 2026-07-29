@@ -3,18 +3,26 @@
 // Client wrapper for the MongoDB-backed Position eval cache.
 //
 //   GET  /api/positions/eval?fen=...&engine=...&depth=N
-//        → returns the deepest cached evaluation ≥ N for (fen, engine)
-//   POST /api/positions/cache (auth required)
-//        → upserts a finished search result keyed by (fen, engineVersion)
+//        → returns the deepest *confirmed* cached evaluation ≥ N for (fen, engine)
+//   POST /api/positions/cache (no auth required)
+//        → submits a finished search result keyed by (fen, engineVersion)
 //
 // The review engine uses these to skip Stockfish work entirely when another
 // user has already evaluated the same position at sufficient depth. This is
 // the multiplayer-cache-federation pattern referenced from Lichess cloud eval.
 //
-// Reads are unauthenticated so anonymous review runs benefit. Writes require
-// auth so cache poisoning is gated on an account.
+// Both directions are anonymous. Writes used to require an account, which meant
+// that on a platform where sign-up is optional the cache never filled and every
+// reader got a permanent miss. The server now defends itself instead of leaning
+// on the auth gate: it verifies the payload against the position (PV legality,
+// score bounds, matching top line) and only *serves* an entry once two
+// independent submissions agree on it — see `backend/positionCacheGuards.ts`.
+//
+// Consequence worth knowing: a freshly deployed cache serves nothing until
+// positions have been seen twice. Misses are free (the review falls through to
+// local WASM), so this shows up as "no speedup yet", not as an error.
 
-import { apiClient, getAuthToken } from './apiClient';
+import { apiClient } from './apiClient';
 import type { EngineVersion } from '../types/engine';
 
 /**
@@ -39,26 +47,6 @@ export function normalizeFenForCache(fen: string): string {
   const parts = fen.trim().split(/\s+/);
   if (parts.length < 4) return fen.trim();
   return parts.slice(0, 4).join(' ');
-}
-
-export interface CachedPositionEval {
-  fen: string;
-  engineVersion: string;
-  depth: number;
-  evaluation: {
-    cp: number | null;
-    mate: number | null;
-    turn: 'w' | 'b';
-  };
-  lines: Array<{
-    multipv: number;
-    uciMoves?: string[];
-    sanMoves?: string[];
-    scoreType?: 'cp' | 'mate';
-    scoreValue?: number;
-    eval?: { type: 'cp' | 'mate'; value: number };
-    pv?: string[];
-  }>;
 }
 
 interface LookupResponse {
@@ -111,6 +99,37 @@ export async function fetchCachedEval(
  */
 export const MAX_CACHED_PV = 64;
 
+/**
+ * Shallowest search the cache-write endpoint accepts. Mirrors `MIN_CACHE_DEPTH`
+ * in `backend/positionCacheGuards.ts` (parity-tested) — a shallow eval is
+ * worthless to a shared cache and is what a spam script sends.
+ */
+export const MIN_CACHE_DEPTH = 12;
+
+export interface CachedPositionEval {
+  fen: string;
+  engineVersion: string;
+  depth: number;
+  /** How many independent submissions agree on this evaluation. The server only
+   *  returns entries at or above its trust threshold, so this is always ≥ 2 —
+   *  it's surfaced so the UI can say where a "free" eval came from. */
+  confirmations?: number;
+  evaluation: {
+    cp: number | null;
+    mate: number | null;
+    turn: 'w' | 'b';
+  };
+  lines: Array<{
+    multipv: number;
+    uciMoves?: string[];
+    sanMoves?: string[];
+    scoreType?: 'cp' | 'mate';
+    scoreValue?: number;
+    eval?: { type: 'cp' | 'mate'; value: number };
+    pv?: string[];
+  }>;
+}
+
 export interface CachePayload {
   fen: string;
   engineVersion: EngineVersion;
@@ -127,16 +146,22 @@ export interface CachePayload {
 }
 
 export async function pushCachedEval(payload: CachePayload): Promise<void> {
-  // Only authenticated users can write to the shared cache.
-  if (!getAuthToken()) return;
+  // Guard 7 server-side: a shallow eval is rejected with a 400 that this function
+  // swallows. Skipping the request outright saves a pointless round trip on every
+  // ply of a low-depth review.
+  if (payload.depth < MIN_CACHE_DEPTH) return;
   try {
     // Normalize the FEN on the write path too (REV-1) so the entry is stored
-    // under the same transposition-stable key that fetchCachedEval reads.
+    // under the same transposition-stable key that fetchCachedEval reads. The
+    // server now *rejects* a non-normalized FEN rather than storing a row no
+    // reader can match, so this is load-bearing, not just tidy.
     await apiClient.post('/positions/cache', {
       ...payload,
       fen: normalizeFenForCache(payload.fen),
     });
   } catch {
-    // Best-effort cache write. Never block the review on cache failure.
+    // Best-effort cache write. Never block the review on cache failure — a 429
+    // from the write budget or a 400 from a guard both land here and are correct
+    // outcomes, not errors the user should see.
   }
 }

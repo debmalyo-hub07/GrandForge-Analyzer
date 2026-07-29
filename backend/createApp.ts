@@ -23,6 +23,13 @@ const allowedOrigins = buildAllowedOrigins(process.env);
  *   review   — driven by ply count. 900 ≈ 7 full-length game reviews per
  *              window, which is more than a human reviews by hand.
  *   browse   — driven by board navigation (a lookup per position visited).
+ *   contribute — anonymous writes to the shared eval cache. Deliberately far
+ *              tighter than `review` and on its own bucket, so a write flood can
+ *              never 429 the *reads* a review depends on. 300 ≈ 2.5 full-game
+ *              reviews' worth of writes per window: an honest reviewer never
+ *              notices, a poisoning script is starved (backend-audit §3 guard 12).
+ *              Writes are best-effort on the client, so hitting this limit costs a
+ *              visitor nothing beyond a cache entry.
  *   default  — ordinary CRUD; the historical budget, unchanged.
  *   strict   — password/credential and upstream-fetch endpoints, where the
  *              limit is an abuse control rather than a capacity one. Login and
@@ -32,11 +39,14 @@ const allowedOrigins = buildAllowedOrigins(process.env);
  *
  * A shared cross-instance store (Upstash) is the Phase 6 item — until then
  * these are per-process, so the Render primary and a Vercel fallback invocation
- * count separately.
+ * count separately. That matters most for `contribute`: a per-process memory
+ * store resets on every cold start, so the effective write budget is looser than
+ * the number here suggests until Phase 6 lands.
  */
 export const RATE_LIMIT_TIERS = {
   review: 900,
   browse: 400,
+  contribute: 300,
   default: 150,
   strict: 20,
 } as const;

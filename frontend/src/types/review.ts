@@ -68,6 +68,14 @@ export interface MoveReview {
    * phase rows; consumers must not render it as a graded move (F10).
    */
   unscored?: boolean;
+  /**
+   * Where the evaluation of the position this move was played *from* came from:
+   * the shared position cache, the tablebase, or a local engine search. Purely
+   * informational — it never affects scoring, since a cached eval is a real
+   * search result at the same engine and depth. Absent on results persisted
+   * before 2026-07-29, and on plies whose source wasn't recorded.
+   */
+  evalSource?: 'cache' | 'tablebase' | 'engine';
 }
 
 export type RatingConfidence = 'none' | 'provisional' | 'low' | 'medium' | 'high';

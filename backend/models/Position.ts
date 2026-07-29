@@ -8,6 +8,24 @@ export interface IPositionLine {
   scoreValue: number;
 }
 
+/**
+ * A disagreeing submission held aside. See `positionCacheGuards.ts` — a write
+ * that contradicts a trusted entry lands here instead of overwriting it, and only
+ * becomes the primary once independently confirmed in its own right.
+ */
+export interface IPositionChallenger {
+  depth: number;
+  evaluation: {
+    cp: number | null;
+    mate: number | null;
+    turn: 'w' | 'b';
+  };
+  lines: IPositionLine[];
+  confirmations: number;
+  contributors: string[];
+  firstSeenAt: Date;
+}
+
 export interface IPosition extends Document {
   fen: string;
   engineVersion: string;
@@ -20,6 +38,17 @@ export interface IPosition extends Document {
   lines: IPositionLine[];
   nodesSearched: number;
   computedAt: Date;
+  /**
+   * How many independent submissions back this evaluation. Readers are only
+   * served an entry at or above `TRUST_THRESHOLD`, which is what turns cache
+   * poisoning from "one anonymous POST" into sustained coordinated effort.
+   */
+  confirmations: number;
+  /** Opaque contributor keys (`u:<userId>` or a salted IP hash) — never raw IPs.
+   *  Exists so one writer cannot confirm their own entry, and so a bad batch is
+   *  purgeable without storing PII. */
+  contributors: string[];
+  challenger?: IPositionChallenger | null;
 }
 
 const PositionLineSchema = new Schema<IPositionLine>({
@@ -28,6 +57,19 @@ const PositionLineSchema = new Schema<IPositionLine>({
   sanMoves:   { type: [String], default: [] },
   scoreType:  { type: String, enum: ['cp', 'mate'], required: true },
   scoreValue: { type: Number, required: true },
+}, { _id: false });
+
+const PositionChallengerSchema = new Schema<IPositionChallenger>({
+  depth: { type: Number, required: true, min: 1, max: 60 },
+  evaluation: {
+    cp:   { type: Number, default: null },
+    mate: { type: Number, default: null },
+    turn: { type: String, enum: ['w', 'b'], required: true },
+  },
+  lines:         { type: [PositionLineSchema], default: [] },
+  confirmations: { type: Number, default: 1, min: 1 },
+  contributors:  { type: [String], default: [] },
+  firstSeenAt:   { type: Date, default: Date.now },
 }, { _id: false });
 
 const PositionSchema = new Schema<IPosition>({
@@ -42,6 +84,15 @@ const PositionSchema = new Schema<IPosition>({
   lines:         { type: [PositionLineSchema], default: [] },
   nodesSearched: { type: Number, default: 0 },
   computedAt:    { type: Date, default: Date.now },
+  // Defaults to 1 rather than 0 so a row counts as its own first submission.
+  // Rows written before this field existed have no value at all, so the reader's
+  // `confirmations: {$gte: TRUST_THRESHOLD}` filter simply doesn't match them:
+  // they are treated as untrusted until someone re-submits the position. No
+  // migration is needed — and there is almost nothing to migrate, since writes
+  // required an account and the auth pages were never routed.
+  confirmations: { type: Number, default: 1, min: 0 },
+  contributors:  { type: [String], default: [] },
+  challenger:    { type: PositionChallengerSchema, default: null },
 });
 
 // The upsert in `routes/positions/cache.ts` filters on (fen, engineVersion),
