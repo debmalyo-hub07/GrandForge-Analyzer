@@ -6,6 +6,13 @@
  * dedication; verified 2026-07-28 against the upstream README and repo metadata.
  * No attribution obligation attaches to this data.)
  *
+ * The catalogue (ECO code, name, move sequence) comes from that CC0 source. The
+ * `description` field does NOT — it is our own prose, seeded separately by
+ * `scripts/seedOpeningTheory.ts`. Because this seeder is wipe-and-replace, it
+ * snapshots every existing `description` by `moveSequence` before clearing and
+ * restores it after inserting; otherwise a routine re-seed would silently
+ * destroy hand-written theory.
+ *
  * Run: npx tsx scripts/seedOpenings.ts
  */
 import { Chess } from 'chess.js';
@@ -29,6 +36,17 @@ interface OpeningSeedDoc {
 async function seedOpenings(): Promise<void> {
   await connectDB();
   console.log('✓ Connected to chess-analyzer');
+
+  // Snapshot our own prose before the wipe. Keyed on moveSequence — the same
+  // join key seedOpeningTheory.ts uses — because _id is regenerated on insert.
+  const existingTheory = new Map<string, string>();
+  for (const doc of await Opening.find(
+    { description: { $exists: true, $ne: '' } },
+    { moveSequence: 1, description: 1 },
+  ).lean()) {
+    if (doc.moveSequence && doc.description) existingTheory.set(doc.moveSequence, doc.description);
+  }
+  console.log(`✓ Snapshotted ${existingTheory.size} existing description(s)`);
 
   await Opening.deleteMany({});
   console.log('✓ Cleared existing openings');
@@ -84,6 +102,24 @@ async function seedOpenings(): Promise<void> {
       totalInserted += openings.length;
       console.log(`  ✓ Inserted ${openings.length} openings for ECO group ${letter.toUpperCase()}`);
     }
+  }
+
+  // Put our prose back on the rows it belonged to. A miss means the catalogue
+  // renamed or dropped that line upstream — report it rather than swallow it.
+  let restored = 0;
+  const orphaned: string[] = [];
+  for (const [moveSequence, description] of existingTheory) {
+    const res = await Opening.updateOne({ moveSequence }, { $set: { description } });
+    if (res.matchedCount > 0) restored += 1;
+    else orphaned.push(moveSequence);
+  }
+  if (existingTheory.size > 0) {
+    console.log(`✓ Restored ${restored}/${existingTheory.size} description(s)`);
+  }
+  if (orphaned.length > 0) {
+    console.warn(`⚠ ${orphaned.length} description(s) had no matching row after re-seed:`);
+    for (const m of orphaned) console.warn(`    ${m}`);
+    console.warn('  Re-run `npx tsx scripts/seedOpeningTheory.ts` to reseed from source.');
   }
 
   const final = await Opening.countDocuments();

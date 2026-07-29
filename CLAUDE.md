@@ -25,10 +25,13 @@ vercel dev           # full prod-like local stack (serverless API + web), see RE
 Seeding (requires `.env` with `MONGODB_URI`):
 
 ```bash
-npx tsx scripts/seedOpenings.ts       # Lichess ECO opening book → MongoDB
+npx tsx scripts/seedOpenings.ts       # CC0 ECO opening book → MongoDB (preserves `description`)
+npx tsx scripts/seedOpeningTheory.ts --dry-run   # our own theory prose → Opening.description
 npx tsx scripts/seedMasterGames.ts    # master games corpus → MongoDB
 npx tsx scripts/ingestExplorer.ts --from <dir|file> --dry-run   # opening-explorer aggregate (see docs/explorer-ingest.md)
 ```
+
+Run `seedOpenings` before `seedOpeningTheory` on a fresh database — the theory seeder only ever updates rows that already exist.
 
 `predev` / `prebuild` hooks run `scripts/copyStockfish.mjs` automatically, copying the sf18 WASM binaries from `node_modules/stockfish/bin` into `frontend/public/stockfish/`. The sf16 and sf17.1 binaries (plus `nn-5af11540bbfe.nnue`, the ~40 MB sf16 runtime network) are committed directly under `frontend/public/stockfish/` — the copy script only guards their presence, it does not produce them. After `npm install`, run the script once before the first dev/build if it didn't fire.
 
@@ -135,6 +138,16 @@ Route modules live under `backend/routes/**`, each exporting a default Express a
 - The min-games threshold is applied against the **global** accumulator after all files fold in (`foldInto`) — a line played 3×/month over 6 months is 18 games and belongs. `--budget-mb` is a hard stop that switches to `upsert: false` (existing rows still refresh, nothing new inserts), not a sizing strategy; raise `--min-games` first, it drops the least-browsed rows.
 - Tests: `scripts/explorer/*.test.ts` (vitest `include` covers `scripts/**/*.{test,spec}.ts`). The transposition test in `resolve.test.ts` — `1.e4 e5 2.Nf3` and `1.Nf3 e5 2.e4` merging to one node with summed counts — is the one that proves the whole pipeline; if it breaks, every explorer statistic is split across duplicate rows.
 - **SAN move-sequence params: never split on `+`.** `backend/openingLookup.ts` owns `parseMoveSequence` (whitespace-only) + `findOpeningByMoves`, shared by `routes/openings/lookup.ts` and `routes/explorer/lookup.ts`. The old inline version did `movesParam.replace(/\+/g, ' ')`, destroying exactly the check markers it needed to match — **297 of 3,733 ECO openings (8.0%) were silently unmatchable**. Express `qs` already decodes a raw `+` to a space before the handler runs, so a literal `+` can only have arrived as `%2B` (which is what axios sends); splitting on it again is always wrong. Pinned by a regression test. `scripts/explorer/pgn.ts`'s `stripSanAnnotations` strips `!`/`?`/NAGs but deliberately keeps `+`/`#` for the same reason — chess.js emits them, so stripping would desync trie keys from every downstream SAN comparison.
+
+### Opening theory (our own prose)
+
+`Opening.description` is GrandForge's own writing — the paragraph(s) the Explore panel renders above the statistics. The catalogue around it (ECO code, name, move sequence) is CC0 public-domain data; the prose is not derived from anyone's opening articles, books, or databases, and it names no other chess platform. Source of truth: **`scripts/data/openingTheory/`**, one file per ECO letter (`a.ts`…`e.ts`) re-exported by `index.ts` as `OPENING_THEORY` — 331 entries covering every ECO family root plus the lines a club player actually meets.
+
+- **`moves` is the join key**, and it must match `Opening.moveSequence` byte-for-byte: space-separated SAN, move numbers stripped, exactly as `seedOpenings.ts` builds it. A wrong key doesn't error — it silently attaches prose to a line no reader will ever open. `scripts/data/openingTheory.test.ts` therefore **replays every sequence on a real chess.js board** and fails on the first illegal move, plus it checks ECO format, duplicate keys, duplicate text, the 2000-char model bound, and mechanically greps the prose for third-party platform names and engine binary names (the independence + UI-naming constraints, enforced rather than reviewed). Auto-picked up by `npm test` via the `scripts/**` include.
+- **`scripts/seedOpeningTheory.ts` is deliberately narrow**: `$set: { description }` on rows matched by `moveSequence`, nothing else. It never inserts or deletes, it's idempotent (reports "already current"), it validates the char bound *before* connecting, `--dry-run` writes nothing, and an unmatched entry is a **loud non-zero exit** — because the failure mode being guarded is a silent no-match, not a crash. A row whose catalogue name has drifted is warned about but still updated.
+- **`seedOpenings.ts` is wipe-and-replace, so it snapshots `description` by `moveSequence` before `deleteMany` and restores it after `insertMany`.** Without that, the routine "refresh the ECO book" command destroys every hand-written paragraph. Descriptions with no matching row post-reseed are reported (the catalogue renamed the line upstream), not swallowed.
+- The prose carries blank-line paragraph breaks. HTML collapses those, so `ExplorePanel`'s `TheorySection` splits on `\n\s*\n` and renders one `<p>` per paragraph — don't collapse it back into a single `<p>`.
+- Adding an entry: append it to the file for its ECO letter, then `npx vitest run scripts/data/openingTheory.test.ts`, then `npx tsx scripts/seedOpeningTheory.ts --dry-run` before the real run.
 
 ### Frontend
 

@@ -36,9 +36,10 @@ export interface IOpening extends Document {
   /**
    * Own-authored theory prose for this opening, shown in the Explore panel above
    * the statistics (design decision D2). Seeded by
-   * `scripts/seedOpeningTheory.ts` from `scripts/data/openingTheory.ts`, which is
-   * the reviewable source of truth — absent for the long tail of openings, where
-   * the panel shows the ECO name and statistics alone.
+   * `scripts/seedOpeningTheory.ts` from `scripts/data/openingTheory/` (one file
+   * per ECO letter), which is the reviewable source of truth — absent for the
+   * long tail of openings, where the panel shows the ECO name and statistics
+   * alone.
    *
    * This text is written for GrandForge. Nothing is copied from, or derived
    * from, another platform's opening articles.

@@ -81,11 +81,21 @@ function TheorySection({ opening }: { opening: ExplorerOpening | null }) {
           {opening.name}
         </h3>
       </div>
-      {/* Prose is our own, written per opening; most rows don't have it yet. */}
+      {/* Prose is our own, written per opening; most rows don't have it yet.
+          It carries blank-line paragraph breaks, which HTML collapses — so split
+          on them rather than dropping the whole thing into one <p>. */}
       {opening.description && (
-        <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)]">
-          {opening.description}
-        </p>
+        <div className="mt-2 space-y-2">
+          {opening.description
+            .split(/\n\s*\n/)
+            .map((para) => para.trim())
+            .filter((para) => para.length > 0)
+            .map((para, i) => (
+              <p key={i} className="text-xs leading-relaxed text-[var(--text-secondary)]">
+                {para}
+              </p>
+            ))}
+        </div>
       )}
     </section>
   );
