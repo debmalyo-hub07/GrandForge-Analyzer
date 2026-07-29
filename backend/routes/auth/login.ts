@@ -10,7 +10,7 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
-const app = createApp();
+const app = createApp('strict');
 
 app.post('/api/auth/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);

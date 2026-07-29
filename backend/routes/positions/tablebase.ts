@@ -13,7 +13,7 @@ import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import TablebaseEntry from '../../models/TablebaseEntry';
 
-const app = createApp();
+const app = createApp('review');
 const UPSTREAM = 'https://tablebase.lichess.ovh/standard';
 const UPSTREAM_TIMEOUT_MS = 4000;
 
@@ -55,7 +55,12 @@ app.get('/api/positions/tablebase', async (req: Request, res: Response) => {
       if (!r.ok) {
         return res.status(200).json({ entry: null, source: 'upstream-miss' });
       }
-      const data = await r.json();
+      // Typed as a loose record rather than left as `unknown`: every field below
+      // is already defensively coerced, and under the server build's lib
+      // (`ES2022` + @types/node, no DOM) `Response.json()` resolves to
+      // `unknown`, so the implicit-any reads would fail `npm run api:build`
+      // while still compiling under the DOM-flavored root tsconfig.
+      const data = (await r.json()) as Record<string, unknown>;
 
       const doc = await TablebaseEntry.findOneAndUpdate(
         { fen: trimmed },

@@ -111,7 +111,7 @@ async function fetchText(
   }
 }
 
-const app = createApp();
+const app = createApp('strict');
 
 // Pointer for anything still calling the old GET shape.
 app.get('/api/import/lichess', (_req, res) => {

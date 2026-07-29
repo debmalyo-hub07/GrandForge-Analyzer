@@ -12,7 +12,7 @@ import { createApp } from '../../createApp';
 import { connectDB } from '../../db';
 import MasterGame from '../../models/MasterGame';
 
-const app = createApp();
+const app = createApp('browse');
 
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

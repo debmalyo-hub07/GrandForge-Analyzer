@@ -30,6 +30,23 @@ The service name IS the URL. Update all three together:
 2. `.env.production` → `VITE_API_BASE_URL`
 3. `vercel.json` → CSP `connect-src` entry
 
+## Verify once, right after the first deploy
+
+These two can only be checked against a real deploy, and both are silent when wrong.
+
+**1. Proxy hop count.** `backend/createApp.ts` sets `trust proxy` to 1, which assumes exactly one proxy prepends to `X-Forwarded-For`. If Render fronts the service with two, every request rate-limit-keys to the same intermediate address and one client can exhaust a bucket for everybody — with no error anywhere.
+
+```bash
+curl -s https://grandforge-api.onrender.com/api/health/deep
+# → {"ok":true,...,"proxy":{"hops":1,"trustProxy":1,"clientIp":"<your real IP>"}}
+```
+
+`hops` must be `1` and `clientIp` must be **your** address, not a `10.x`/`172.x` internal one. If `hops` is 2, raise `trust proxy` to match in `createApp.ts` **and** in `router.ts` (the outer app sets it separately for the health routes).
+
+**2. DB reachability from Render's region.** The same response carries `db.latencyMs` — a real `admin().ping()`, not a `readyState` check. Expect double-digit ms if the Atlas cluster is in/near `region: singapore`; 200 ms+ means the region pair is wrong and every request pays it.
+
+Note `/api/health/deep` is deliberately **not** the Render health-check path and **not** the client's failover probe — both use the DB-free `/api/health`, so an Atlas blip can neither restart the service nor stampede every browser into failover.
+
 ## Verifying failover
 
 - Suspend the Render service (dashboard → Suspend) → reload the app → imports/openings/review-cache still work via `/api` (Vercel). The console logs one `[GrandForge] API primary … failing over` warning.
@@ -41,10 +58,12 @@ Delete or blank `VITE_API_BASE_URL` in `.env.production` and push — the client
 
 ## Operational notes
 
-- **Rate limit**: 150 requests / 15 min / IP **per route module** (~25 independent buckets, `backend/createApp.ts` — a single global bucket would 429 a normal game review's ~160 position-cache requests). In-memory — resets on restart/deploy.
+- **Build/start**: `npm ci && npm run api:build && npm prune --omit=dev`, then `node dist-server/backend/index.js`. The API ships as compiled CommonJS (`tsconfig.server.json` → `dist-server/`, with a `{"type":"commonjs"}` marker written by `scripts/buildServer.mjs` to override the root `"type": "module"`). Two reasons: free-tier Render spins down after 15 min idle so cold start is the normal path and `tsx` re-transpiled the whole backend on each one; and with a build step the frontend tree (react, the stockfish WASM package, vite, playwright, the vercel CLI) is all devDependencies that the prune deletes. `npm run api:start:tsx` still runs from source if you need it.
+  **`dependencies` in package.json now means "the API imports this at runtime."** Anything else belongs in devDependencies, or the prune leaves it in the slug.
+- **Rate limit**: per-IP, per 15 min, **per route module** (~25 independent buckets — a single global bucket would 429 a normal review partway through). Four tiers in `backend/createApp.ts`: `review` 900 (positions eval/cache/tablebase — one review is ~1 read per ply and `moveReviews` is bounded at 600), `browse` 400 (openings lookup/tree, master games), `default` 150, `strict` 20 (login/register brute-force surface, the chess.com/lichess import routes, admin migrate). In-memory — resets on restart/deploy; a shared store is the Phase 6 item.
 - **Admin migrate**: `POST /api/engine-index/migrate` (header `x-admin-key`) now pages: `?limit=N` (default 500, max 5000), response includes `remaining` — repeat until 0. The serverless 30 s ceiling no longer applies on Render.
 - **ReviewJob TTL**: job telemetry auto-expires 30 days after last update (Mongo TTL on `updatedAt`). Review RESULTS are unaffected (they live on Game/Session).
-- **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000`; serverless keeps the old tight settings (`backend/db.ts`, keyed on `process.env.VERCEL`).
+- **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000` / `maxIdleTimeMS 60000`; serverless is `maxPoolSize 2` / `maxIdleTimeMS 15000` (Atlas M0 caps at 500 connections total and dozens of lambdas can be warm during a review — a bigger per-lambda pool only reserves slots it never uses). Keyed on `process.env.VERCEL` in `backend/db.ts`.
 - **Logs**: Render dashboard → Logs streams the request logger output (method, path, status, ms).
 
 ## One-time Atlas index migration (after deploying the 2026-07 correctness fixes)

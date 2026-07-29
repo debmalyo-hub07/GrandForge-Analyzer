@@ -11,7 +11,7 @@ import { createApp } from '../../createApp';
 import { connectDB, hasMongoUri } from '../../db';
 import Opening, { type IOpening } from '../../models/Opening';
 
-const app = createApp();
+const app = createApp('browse');
 
 app.get('/api/openings/tree', async (req: Request, res: Response) => {
   try {

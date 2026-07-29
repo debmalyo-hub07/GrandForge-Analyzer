@@ -1,0 +1,37 @@
+{
+  // Server build — emits real JS so Render runs `node`, not `tsx`.
+  //
+  // Two reasons this exists rather than shipping TypeScript and running tsx in
+  // production (backend-audit F7b):
+  //   1. Cold start. Render free spins the service down after 15 min idle, so
+  //      cold starts are the common case, and tsx re-transpiles the whole
+  //      backend on every one of them — seconds of latency added to the exact
+  //      request that was already waiting on the container.
+  //   2. Install size. With a build step, tsx and the entire frontend
+  //      dependency tree become devDependencies that `npm prune --omit=dev`
+  //      deletes before the slug is packed.
+  //
+  // CommonJS, not ESM: the root package.json is `"type": "module"`, and Node's
+  // ESM loader requires fully-specified relative paths (`./router.js`) which
+  // this source deliberately does not write. `scripts/buildServer.mjs` drops a
+  // `{"type":"commonjs"}` package.json into the output directory so the emitted
+  // .js files are read as CJS regardless of the root setting.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "dist-server",
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    // tsc refuses `isolatedModules` + `commonjs` re-exports in some shapes and
+    // it buys nothing here (no bundler in this pipeline).
+    "isolatedModules": false
+  },
+  "include": ["backend/**/*.ts"],
+  "exclude": ["node_modules", "backend/**/*.test.ts", "backend/**/*.spec.ts"]
+}

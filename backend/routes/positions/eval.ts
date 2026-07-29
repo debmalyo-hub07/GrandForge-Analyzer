@@ -13,7 +13,7 @@ import { connectDB } from '../../db';
 import Position from '../../models/Position';
 import { ENGINE_VERSION_VALUES } from '../../zodSchemas';
 
-const app = createApp();
+const app = createApp('review');
 
 const EvalQuerySchema = z.object({
   fen: z.string().trim().min(1).max(120),

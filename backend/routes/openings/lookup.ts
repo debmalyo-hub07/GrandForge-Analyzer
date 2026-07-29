@@ -12,7 +12,7 @@ import { createApp } from '../../createApp';
 import { connectDB, hasMongoUri } from '../../db';
 import Opening from '../../models/Opening';
 
-const app = createApp();
+const app = createApp('browse');
 
 app.get('/api/openings/lookup', async (req: Request, res: Response) => {
   try {

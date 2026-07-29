@@ -71,9 +71,20 @@ export async function connectDB(): Promise<mongoose.Connection> {
     .connect(process.env.MONGODB_URI!, {
       dbName: 'chess-analyzer',
       bufferCommands: false,
-      maxPoolSize: serverless ? 5 : 20,
+      // Atlas M0 allows 500 connections *total*. A serverless invocation
+      // handles one request at a time, so a pool of 5 buys nothing but holds 5
+      // slots — and Vercel can have dozens of concurrent lambdas warm during a
+      // review, which is how the tier gets exhausted and every client starts
+      // seeing connection timeouts. 2 covers the one live query plus overlap
+      // during a socket replacement.
+      maxPoolSize: serverless ? 2 : 20,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: serverless ? 10000 : 45000,
+      // Reap idle sockets instead of parking them for the container's lifetime.
+      // Without this a frozen-but-not-yet-reclaimed lambda keeps its Atlas
+      // slots the whole time; the persistent server gets a longer window since
+      // it genuinely reuses the pool.
+      maxIdleTimeMS: serverless ? 15_000 : 60_000,
     })
     .then((conn) => {
       cached = conn.connection;

@@ -13,7 +13,7 @@ import { connectDB } from '../../db';
 import { indexGame } from '../../indexGame';
 import Game from '../../models/Game';
 
-const app = createApp();
+const app = createApp('strict');
 
 app.post('/api/engine-index/migrate', async (req, res) => {
   try {

@@ -17,6 +17,8 @@
  */
 import express from 'express';
 
+import { connectDB } from './db';
+
 import authLogin from './routes/auth/login';
 import authMe from './routes/auth/me';
 import authPreferences from './routes/auth/preferences';
@@ -44,6 +46,11 @@ import sessionsCreate from './routes/sessions/create';
 import sessionsIndex from './routes/sessions/index';
 
 const app = express();
+
+// The outer app serves /api/health and /api/health/deep itself, so it needs the
+// same proxy trust as the inner route apps (createApp) — `req.ip` is resolved
+// against `req.app`'s settings, and req.app is this app for those two handlers.
+app.set('trust proxy', 1);
 
 // Security headers on every response. This router only ever serves JSON, never
 // HTML — vercel.json sets an equivalent (richer, document-oriented) set for
@@ -77,6 +84,52 @@ app.get('/api/health', (_req, res) => {
   // correct: public endpoint, no credentials on the probe fetch.
   res.set('Access-Control-Allow-Origin', '*');
   res.status(200).json({ ok: true, uptime: Math.round(process.uptime()) });
+});
+
+/**
+ * Deep health check — for monitoring and for verifying a fresh deploy. NOT the
+ * Render health-check path and NOT the client failover probe: both use
+ * `/api/health`, which must stay DB-free so a transient Atlas blip can't get the
+ * whole service restarted or make every client fail over at once.
+ *
+ * `proxyHops` is the point of the `xForwardedFor` echo: `createApp()` sets
+ * `trust proxy` to 1, which is only correct if exactly one proxy prepends to
+ * X-Forwarded-For. If a real deploy shows 2+, every request rate-limit-keys to
+ * the same intermediate address and one client can exhaust a bucket for
+ * everyone — check this once after the first deploy (docs/deploy-render.md).
+ */
+app.get('/api/health/deep', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'no-store');
+
+  const xff = req.headers['x-forwarded-for'];
+  const xffValue = Array.isArray(xff) ? xff.join(', ') : (xff ?? '');
+  const proxyHops = xffValue ? xffValue.split(',').filter((s) => s.trim()).length : 0;
+
+  const started = Date.now();
+  let db: { ok: boolean; latencyMs: number | null; error?: string };
+  try {
+    const conn = await connectDB();
+    // A real round trip. `readyState === 1` only proves a socket was opened at
+    // some point; it stays 1 across an Atlas failover that rejects commands.
+    await conn.db!.admin().ping();
+    db = { ok: true, latencyMs: Date.now() - started };
+  } catch (err) {
+    db = {
+      ok: false,
+      latencyMs: Date.now() - started,
+      error: err instanceof Error ? err.message : 'unknown error',
+    };
+  }
+
+  res.status(db.ok ? 200 : 503).json({
+    ok: db.ok,
+    uptime: Math.round(process.uptime()),
+    // 'render' / 'vercel' / 'local' — which of the two deploy targets answered.
+    runtime: process.env.RENDER ? 'render' : process.env.VERCEL ? 'vercel' : 'local',
+    db,
+    proxy: { hops: proxyHops, trustProxy: 1, clientIp: req.ip ?? null },
+  });
 });
 
 // Order matters: more specific literal paths must precede the `[^/]+` param

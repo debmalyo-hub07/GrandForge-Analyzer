@@ -11,7 +11,7 @@ const registerSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
-const app = createApp();
+const app = createApp('strict');
 
 app.post('/api/auth/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);

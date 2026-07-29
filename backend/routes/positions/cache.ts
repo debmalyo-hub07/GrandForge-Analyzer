@@ -17,7 +17,7 @@ import { requireAuth, type AuthRequest } from '../../auth';
 import Position from '../../models/Position';
 import { ENGINE_VERSION_VALUES } from '../../zodSchemas';
 
-const app = createApp();
+const app = createApp('review');
 
 /** A UCI move: from-square, to-square, optional promotion piece. */
 const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
