@@ -20,6 +20,7 @@ import { OpeningBadge } from '../components/navigation/OpeningBadge';
 import { MoveList } from '../components/navigation/MoveList';
 import { NavigationControls } from '../components/navigation/NavigationControls';
 import { ReviewTab } from '../components/review/ReviewTab';
+import { ExplorePanel } from '../components/explorer/ExplorePanel';
 import { ImportTab } from '../components/import/ImportTab';
 import { useStockfish } from '../hooks/useStockfish';
 import { useOpeningDetect } from '../hooks/useOpeningDetect';
@@ -175,6 +176,7 @@ export function AnalyzerPage() {
                   </div>
                 </div>
               }
+              explore={<ExplorePanel />}
               review={<ReviewTab />}
               importPanel={<ImportTab />}
             />

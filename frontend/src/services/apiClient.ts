@@ -7,6 +7,7 @@ import {
   isFailoverEligible,
   markPrimaryFailed,
 } from './apiBase';
+import type { ExplorerLookupResponse } from '../types/explorer';
 
 const TOKEN_KEY = 'grandforge_token';
 
@@ -169,6 +170,19 @@ export const positions = {
     lines: unknown;
   }) =>
     apiClient.post('/positions/cache', body).then(r => r.data),
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Opening explorer (our own aggregate — no third-party call on this path)
+// ────────────────────────────────────────────────────────────────────────────
+export const explorer = {
+  /**
+   * `moves` is optional and purely an optimization: sending the SAN path also
+   * returns the matched ECO opening + theory prose in the same response, which
+   * saves the Explore panel a second round trip per position.
+   */
+  lookup: (params: { fen: string; moves?: string }) =>
+    apiClient.get('/explorer/lookup', { params }).then((r) => r.data as ExplorerLookupResponse),
 };
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -5,6 +5,13 @@ import { useEngineStore } from './engineStore';
 
 export type Arrow = [string, string, string?];
 
+/**
+ * Side-panel tabs. Single source of truth — the state field, the setter and the
+ * persisted shape all reference this, so adding a tab is one edit rather than
+ * three that can drift apart.
+ */
+export type SidePanelTabId = 'analysis' | 'moves' | 'explore' | 'review' | 'import';
+
 interface UIState {
   theme: 'dark' | 'light';
   boardTheme: string;
@@ -14,7 +21,7 @@ interface UIState {
   showLegalMoves: boolean;
   customArrows: Arrow[];
   highlightedSquares: Set<Square>;
-  activeTab: 'analysis' | 'moves' | 'review' | 'import';
+  activeTab: SidePanelTabId;
   boardSize: number;
 
   boardToolsOpen: boolean;
@@ -44,7 +51,7 @@ interface UIState {
   setCustomArrows: (arrows: Arrow[]) => void;
   toggleHighlight: (square: Square) => void;
   clearHighlights: () => void;
-  setActiveTab: (tab: 'analysis' | 'moves' | 'review' | 'import') => void;
+  setActiveTab: (tab: SidePanelTabId) => void;
   updateBoardSize: (size: number) => void;
   setBoardToolsOpen: (open: boolean) => void;
   setInlineNotation: (v: boolean) => void;
@@ -67,7 +74,7 @@ interface PersistedUIState {
   orientation: 'white' | 'black';
   showCoordinates: boolean;
   showLegalMoves: boolean;
-  activeTab: 'analysis' | 'moves' | 'review' | 'import';
+  activeTab: SidePanelTabId;
   inlineNotation: boolean;
   disclosureButtons: boolean;
   moveAnnotations: boolean;
