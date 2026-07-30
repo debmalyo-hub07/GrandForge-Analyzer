@@ -9,10 +9,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pause, Play } from 'lucide-react';
 import { useReviewStore } from '../../store/reviewStore';
+import { useUIStore } from '../../store/uiStore';
 import type { MoveClassification, MoveReview } from '../../types/review';
 import { cpAndMateToWin } from '../../utils/reviewUtils';
 import { readableTextColor } from '../../utils/boardUtils';
 import { useReviewAutoPlayback } from '../../hooks/useReviewAutoPlayback';
+import { dwellLabel, nextDwell } from './reviewDwell';
 
 const BADGE: Record<MoveClassification, { label: string; glyph: string; color: string; tone: string }> = {
   brilliant:  { label: 'Brilliant',  glyph: '!!', color: '#1baca6', tone: 'positive' },
@@ -121,6 +123,8 @@ export function ReviewMovePanel() {
   const currentReviewPly = useReviewStore((s) => s.currentReviewPly);
   const setCurrentReviewPly = useReviewStore((s) => s.setCurrentReviewPly);
   const { isPlaying, toggle } = useReviewAutoPlayback();
+  const reviewDwellMs = useUIStore((s) => s.reviewDwellMs);
+  const setReviewDwellMs = useUIStore((s) => s.setReviewDwellMs);
 
   const review: MoveReview | null = useMemo(() => {
     if (!result || currentReviewPly <= 0) return null;
@@ -160,6 +164,15 @@ export function ReviewMovePanel() {
           </button>
           <button onClick={() => setCurrentReviewPly(total)} disabled={currentReviewPly >= total} aria-label="Last move">
             <ChevronsRight size={14} />
+          </button>
+          {/* Speed cycles rather than opening a menu — one control, one tap, and
+              it reads as a state label the way a video player's does. */}
+          <button
+            className="rmp-speed-btn"
+            onClick={() => setReviewDwellMs(nextDwell(reviewDwellMs))}
+            aria-label={`Playback speed: ${dwellLabel(reviewDwellMs)}. Click to change.`}
+          >
+            {dwellLabel(reviewDwellMs)}
           </button>
         </div>
       </div>

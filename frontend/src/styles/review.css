@@ -531,6 +531,18 @@
   box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--bg-void);
 }
 
+/* The speed button carries a text label ("0.5x"), so it cannot use the 28px
+   square sizing the icon buttons share — it needs room for four characters. */
+.rmp-controls .rmp-speed-btn {
+  width: auto;
+  min-width: 38px;
+  padding: 0 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .rmp-empty {
   font-size: 0.85rem;
   color: var(--text-muted);

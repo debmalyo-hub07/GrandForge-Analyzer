@@ -49,6 +49,10 @@ interface UIState {
   /** 0..1, applied to the synthesized board sounds. */
   soundVolume: number;
 
+  /** Dwell per ply for review autoplay, in ms. Persisted so a user who prefers
+   *  a fast walkthrough does not reset it every session. */
+  reviewDwellMs: number;
+
   flipBoard: () => void;
   toggleTheme: () => void;
   setShowCoordinates: (v: boolean) => void;
@@ -78,6 +82,7 @@ interface UIState {
   setCheckableKing: (v: boolean) => void;
   setSoundEnabled: (v: boolean) => void;
   setSoundVolume: (v: number) => void;
+  setReviewDwellMs: (v: number) => void;
 }
 
 interface PersistedUIState {
@@ -101,6 +106,7 @@ interface PersistedUIState {
   checkableKing: boolean;
   soundEnabled: boolean;
   soundVolume: number;
+  reviewDwellMs: number;
 }
 
 export const useUIStore = create<UIState>()(
@@ -135,6 +141,7 @@ export const useUIStore = create<UIState>()(
 
       soundEnabled: true,
       soundVolume: 0.7,
+      reviewDwellMs: 1800,
 
       flipBoard: () =>
         set({ orientation: get().orientation === 'white' ? 'black' : 'white' }),
@@ -181,10 +188,13 @@ export const useUIStore = create<UIState>()(
         set({ soundVolume: clamped });
         setSoundVolume(clamped);
       },
+      // Clamped so a corrupt persisted value cannot produce a zero-delay timer
+      // that advances the review as fast as React can re-render.
+      setReviewDwellMs: (v) => set({ reviewDwellMs: Math.max(300, Math.min(6000, v)) }),
     }),
     {
       name: 'grandforge-ui',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedUIState => ({
         theme: state.theme,
@@ -207,6 +217,7 @@ export const useUIStore = create<UIState>()(
         checkableKing: state.checkableKing,
         soundEnabled: state.soundEnabled,
         soundVolume: state.soundVolume,
+        reviewDwellMs: state.reviewDwellMs,
       }),
       migrate: (persisted: any, version: number): PersistedUIState => {
         const p = { ...(persisted ?? {}) };
@@ -225,6 +236,12 @@ export const useUIStore = create<UIState>()(
         // the Settings toggle uncontrolled and the volume slider render NaN.
         if (version < 3) {
           Object.assign(p, { soundEnabled: true, soundVolume: 0.7 });
+        }
+        // v3→v4 adds review autoplay speed. Without a default the dwell would be
+        // `undefined`, which setTimeout coerces to 0 — the review would flash
+        // through every ply the instant playback started.
+        if (version < 4) {
+          Object.assign(p, { reviewDwellMs: 1800 });
         }
         return p as PersistedUIState;
       },

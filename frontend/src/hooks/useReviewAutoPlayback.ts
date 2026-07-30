@@ -8,6 +8,7 @@
 // from useKeyboardNav (Space key) without a custom event bus.
 import { useCallback, useEffect, useRef } from 'react';
 import { useReviewStore } from '../store/reviewStore';
+import { useUIStore } from '../store/uiStore';
 
 const DEFAULT_DWELL_MS = 1800;
 
@@ -18,7 +19,14 @@ export interface UseReviewAutoPlayback {
   pause: () => void;
 }
 
-export function useReviewAutoPlayback(dwellMs: number = DEFAULT_DWELL_MS): UseReviewAutoPlayback {
+/**
+ * @param dwellMs Override the per-ply dwell. Omit it (the normal case) to use the
+ *   user's persisted `reviewDwellMs` — passing a literal here would make the
+ *   speed control in the playback panel unreachable.
+ */
+export function useReviewAutoPlayback(dwellMs?: number): UseReviewAutoPlayback {
+  const persistedDwell = useUIStore((s) => s.reviewDwellMs);
+  const effectiveDwell = dwellMs ?? persistedDwell ?? DEFAULT_DWELL_MS;
   const isReviewMode = useReviewStore((s) => s.isReviewMode);
   const currentReviewPly = useReviewStore((s) => s.currentReviewPly);
   const setCurrentReviewPly = useReviewStore((s) => s.setCurrentReviewPly);
@@ -75,9 +83,9 @@ export function useReviewAutoPlayback(dwellMs: number = DEFAULT_DWELL_MS): UseRe
       const next = currentReviewPly + 1;
       expectedPlyRef.current = next;
       setCurrentReviewPly(next);
-    }, dwellMs);
+    }, effectiveDwell);
     return clear;
-  }, [isPlaying, isReviewMode, currentReviewPly, total, dwellMs, setCurrentReviewPly, pause]);
+  }, [isPlaying, isReviewMode, currentReviewPly, total, effectiveDwell, setCurrentReviewPly, pause]);
 
   // Hard-pause when review mode exits.
   useEffect(() => {
