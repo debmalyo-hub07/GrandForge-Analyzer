@@ -399,12 +399,11 @@ export const OPENING_THEORY_A: OpeningTheory[] = [
     moves: 'd4 Nf6',
     text: "The gateway to the Indian defences and one of the most flexible replies to 1.d4. The knight controls e4 and d5, stops White from building the big pawn centre immediately, and commits to nothing: after 2.c4 Black chooses between the Nimzo-Indian, Queen's Indian, King's Indian, Grünfeld, and Benoni, and after 2.Nf3 or 2.Bg5 the game heads for the London, Torre, or Trompowsky.\n\nThis flexibility is the modern main road. The practical consequence for Black is that you need a plan against each of White's tries, and for White that the choice of second move is really a choice of which middlegame you want to fight. Everything in this family shares one theme: Black lets White build a centre and then attacks it.",
   },
-  {
-    eco: 'A45',
-    name: 'Basque Opening',
-    moves: 'd4 Nf6 b3',
-    text: "A quiet, offbeat build. White prepares Bb2 to press on the long diagonal and keeps c4 and e3 available. It is not a mistake, just slow — the pawn on b3 does no central work, and Black gets time to take space.\n\nBlack's most sensible plans are the direct ones: d5 and c5 or e6 for a broad centre, or g6 and Bg7 to meet the b2 bishop head-on with a fianchetto of Black's own. Because White has committed to a flank move, Black can often play e5 or c5 with more freedom than in a standard queen's-pawn game. Develop everything, castle, and choose the pawn break that opens lines toward the side where you have more pieces.",
-  },
+  // NOTE: an entry for "Basque Opening" (d4 Nf6 b3) was removed here. No row in
+  // the CC0 ECO catalogue carries that sequence under any key, so the prose could
+  // never be shown — the seeder only ever $sets `description` on a row matched by
+  // `moveSequence`, it never inserts. If the catalogue gains the line later, the
+  // text is recoverable from git history.
   {
     eco: 'A45',
     name: 'Canard Opening',

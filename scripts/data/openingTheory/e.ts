@@ -11,10 +11,10 @@ export const OPENING_THEORY_E: OpeningTheory[] = [
     text: "White combines the Queen's Gambit pawn structure with a kingside fianchetto, putting the bishop on g2 where it presses down the long diagonal at d5, c6, and b7 for the rest of the game. It is one of the most respected and enduring systems against 1...e6 setups.\n\nBlack's two main approaches are the Open Catalan (d5 and dxc4, grabbing the pawn and trying to hold it with a6 and b5 or to give it back for development) and the Closed Catalan (d5 and c6 or Be7 with a solid, cramped structure). White's compensation for the pawn in the Open lines is permanent pressure — Qa4 or Qc2, Ne5, Rd1, and e4. Slow, deep, and famously hard to play against.",
   },
   {
-    eco: 'E01',
+    eco: 'E02',
     name: 'Catalan Opening: Open Defense',
-    moves: 'd4 Nf6 c4 e6 g3 d5 Bg2',
-    text: "The Catalan's main tabiya. Black has played d5 and White has completed the fianchetto; the immediate question is whether Black takes on c4. Taking is the Open Catalan — the most testing and most theoretically important treatment.\n\nAfter dxc4 White typically plays Qa4+ or Qc2 and Nf3, recovering the pawn or getting enormous compensation for it: the g2 bishop, the open c- and d-files, and pressure Black must neutralise before developing the c8 bishop. Black's methods are a6 and b5 to hold the pawn, Bd7 and Bc6 to trade off the Catalan bishop, or c5 and Nc6 for immediate central counterplay. Knowing which one you are playing for matters more than knowing many moves.",
+    moves: 'd4 Nf6 c4 e6 g3 d5 Bg2 dxc4',
+    text: "The Open Catalan — the most testing and most theoretically important treatment. Black has taken on c4, accepting a pawn in exchange for letting White's light-squared bishop breathe on the long diagonal.\n\nWhite typically plays Qa4+ or Qc2 and Nf3, recovering the pawn or getting enormous compensation for it: the g2 bishop, the open c- and d-files, and pressure Black must neutralise before developing the c8 bishop. Black's methods are a6 and b5 to hold the pawn, Bd7 and Bc6 to trade off the Catalan bishop, or c5 and Nc6 for immediate central counterplay. Knowing which one you are playing for matters more than knowing many moves.",
   },
   {
     eco: 'E06',
