@@ -19,15 +19,20 @@ services:
     # dominates); singapore is closest to Atlas Mumbai/Singapore clusters.
     region: singapore
     # Build to plain JS, then throw away everything the running process does not
-    # import. `npm ci` (not --omit=dev) is required because typescript itself is
-    # a devDependency; the prune afterwards is what keeps the slug small — the
+    # import. `--include=dev` is REQUIRED: NODE_ENV=production is set in envVars
+    # below, and under that npm treats a bare `npm ci` as production-only, so
+    # typescript (a devDependency) never installs and api:build dies with
+    # "typescript not installed". The previous comment here said "npm ci (not
+    # --omit=dev) is required" — necessary but not sufficient, since NODE_ENV
+    # alone already prunes dev deps. vercel.json carries --include=dev for the
+    # same reason. The prune afterwards is what keeps the slug small — the
     # frontend tree (react, stockfish WASM, vite, playwright, the vercel CLI)
     # is all devDependencies now and none of it survives into the slug.
     #
     # Running compiled JS instead of `tsx backend/index.ts` also removes a
     # whole-backend transpile from every cold start, and on free-tier Render
     # (spins down after 15 min idle) cold start is the normal path.
-    buildCommand: npm ci && npm run api:build && npm prune --omit=dev
+    buildCommand: npm ci --include=dev && npm run api:build && npm prune --omit=dev
     startCommand: npm run api:start
     healthCheckPath: /api/health
     envVars:
