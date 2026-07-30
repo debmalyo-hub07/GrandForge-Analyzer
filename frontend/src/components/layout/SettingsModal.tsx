@@ -353,9 +353,12 @@ function InterfaceSettings() {
         checked={inlineNotation}
         onChange={setInlineNotation}
       />
+      {/* The flag is named `disclosureButtons` for historical reasons, but its
+          only effect is whether variations render at all — MoveList has no
+          disclosure buttons to control. Labelled for what it does. */}
       <Toggle
-        label="Expand/collapse buttons"
-        description="Disclosure arrows on lines that branch"
+        label="Show variations"
+        description="Off hides every side line from the move list"
         checked={disclosureButtons}
         onChange={setDisclosureButtons}
       />

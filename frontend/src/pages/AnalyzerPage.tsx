@@ -141,7 +141,11 @@ export function AnalyzerPage() {
           }
           board={
             <div className="board-column relative flex flex-col gap-2">
-              <div className="md:hidden">
+              {/* sm (640px), NOT md — the vertical bar is hidden by CSS below
+                  640px, so gating this at 768px rendered both bars for one
+                  position across the whole 641–767px band. The two breakpoints
+                  have to name the same number. */}
+              <div className="sm:hidden">
                 <EvalBarHorizontal />
               </div>
               <div className="player-tag-row">

@@ -175,8 +175,11 @@ export function BoardToolsPanel({ onClose }: BoardToolsPanelProps) {
             checked={showCoordinates}
             onChange={setShowCoordinates}
           />
+          {/* See SettingsModal: the flag is `disclosureButtons` historically,
+              but MoveList has no disclosure buttons — off simply hides every
+              variation. Labelled for the actual effect. */}
           <Toggle
-            label="Disclosure buttons"
+            label="Show variations"
             checked={disclosureButtons}
             onChange={setDisclosureButtons}
           />

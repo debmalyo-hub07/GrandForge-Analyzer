@@ -185,34 +185,12 @@ main {
   padding: 12px;
 }
 
-@media (max-width: 1024px) {
-  .analyzer-layout {
-    grid-template-columns: 32px 1fr;
-  }
-  /* The grid children are the *-slot wrappers in AnalyzerLayout. `.side-panel`
-     is a div INSIDE SidePanel, so placing it here does nothing — the panel then
-     auto-placed into row 2 / column 1, i.e. the 32px eval-bar column. */
-  .side-panel-slot {
-    grid-column: 1 / -1;
-  }
-  .side-panel {
-    max-height: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .analyzer-layout {
-    grid-template-columns: 1fr;
-    padding: 8px;
-    gap: 8px;
-  }
-  .eval-bar-vertical {
-    display: none;
-  }
-  .eval-bar-horizontal {
-    display: flex;
-  }
-}
+/* Responsive rules for .analyzer-layout live in ONE place — the tablet/mobile
+   blocks near the end of this file. There used to be a second, earlier copy of
+   each breakpoint here; equal specificity meant the later copy silently won, so
+   editing this one changed nothing. The old 640px copy also targeted
+   `.eval-bar-vertical`, which no component renders (the element is
+   `.eval-bar-vertical-wrap`), so it had never done anything at all. */
 
 /* -------- Eval bar (vertical) -------- */
 .eval-bar {
@@ -756,8 +734,11 @@ main {
   }
 }
 
-/* -------- Mobile (max-width 640px) -------- */
-@media (max-width: 640px) {
+/* -------- Mobile -------- */
+/* 639.98px, not 640px: Tailwind's `sm:` prefix is min-width 640px, and
+   AnalyzerPage gates the horizontal eval bar with `sm:hidden`. A max-width of
+   640px here would overlap that at exactly 640px and hide BOTH eval bars. */
+@media (max-width: 639.98px) {
   .analyzer-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
