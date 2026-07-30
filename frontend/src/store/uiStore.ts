@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Square } from 'chess.js';
 import { useEngineStore } from './engineStore';
+import { setSoundVolume } from '../services/SoundManager';
 
 export type Arrow = [string, string, string?];
 
@@ -43,6 +44,11 @@ interface UIState {
   pinnedPieces: boolean;
   checkableKing: boolean;
 
+  // Sound
+  soundEnabled: boolean;
+  /** 0..1, applied to the synthesized board sounds. */
+  soundVolume: number;
+
   flipBoard: () => void;
   toggleTheme: () => void;
   setShowCoordinates: (v: boolean) => void;
@@ -70,6 +76,8 @@ interface UIState {
   setUndefendedPieces: (v: boolean) => void;
   setPinnedPieces: (v: boolean) => void;
   setCheckableKing: (v: boolean) => void;
+  setSoundEnabled: (v: boolean) => void;
+  setSoundVolume: (v: number) => void;
 }
 
 interface PersistedUIState {
@@ -91,6 +99,8 @@ interface PersistedUIState {
   undefendedPieces: boolean;
   pinnedPieces: boolean;
   checkableKing: boolean;
+  soundEnabled: boolean;
+  soundVolume: number;
 }
 
 export const useUIStore = create<UIState>()(
@@ -122,6 +132,9 @@ export const useUIStore = create<UIState>()(
       undefendedPieces: false,
       pinnedPieces: false,
       checkableKing: false,
+
+      soundEnabled: true,
+      soundVolume: 0.7,
 
       flipBoard: () =>
         set({ orientation: get().orientation === 'white' ? 'black' : 'white' }),
@@ -162,10 +175,16 @@ export const useUIStore = create<UIState>()(
       setUndefendedPieces: (v) => set({ undefendedPieces: v }),
       setPinnedPieces: (v) => set({ pinnedPieces: v }),
       setCheckableKing: (v) => set({ checkableKing: v }),
+      setSoundEnabled: (v) => set({ soundEnabled: v }),
+      setSoundVolume: (v) => {
+        const clamped = Math.max(0, Math.min(1, v));
+        set({ soundVolume: clamped });
+        setSoundVolume(clamped);
+      },
     }),
     {
       name: 'grandforge-ui',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedUIState => ({
         theme: state.theme,
@@ -186,11 +205,13 @@ export const useUIStore = create<UIState>()(
         undefendedPieces: state.undefendedPieces,
         pinnedPieces: state.pinnedPieces,
         checkableKing: state.checkableKing,
+        soundEnabled: state.soundEnabled,
+        soundVolume: state.soundVolume,
       }),
       migrate: (persisted: any, version: number): PersistedUIState => {
+        const p = { ...(persisted ?? {}) };
         if (version < 2) {
-          return {
-            ...persisted,
+          Object.assign(p, {
             computerAnalysis: true,
             bestMoveArrow: true,
             pieceManeuverArrows: false,
@@ -198,9 +219,14 @@ export const useUIStore = create<UIState>()(
             undefendedPieces: false,
             pinnedPieces: false,
             checkableKing: false,
-          };
+          });
         }
-        return persisted;
+        // v2→v3 adds sound. An old blob has neither key; `undefined` would make
+        // the Settings toggle uncontrolled and the volume slider render NaN.
+        if (version < 3) {
+          Object.assign(p, { soundEnabled: true, soundVolume: 0.7 });
+        }
+        return p as PersistedUIState;
       },
     }
   )

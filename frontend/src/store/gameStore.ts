@@ -5,6 +5,8 @@ import type { IndexedGame } from '../services/GameEngineAdapter';
 import { useEngineStore } from './engineStore';
 import { useUIStore } from './uiStore';
 import { useReviewStore } from './reviewStore';
+import { classifyMoveSound } from '../utils/moveSound';
+import { playMoveSound } from '../services/SoundManager';
 
 export interface GameMetadata {
   white?: string;
@@ -113,8 +115,26 @@ function computeFlags(tree: MoveTree, currentNodeId: string | null): { isAtStart
   };
 }
 
-function resetTransientStateForNewGame() {
-  try { useEngineStore.getState().resetAnalysisState(); } catch { /* noop */ }
+/**
+ * Sound a move the user just played. Reads the preference at call time rather
+ * than subscribing, so muting takes effect on the very next move. Wrapped
+ * because playMoveSound is a no-op without an AudioContext but the uiStore read
+ * itself must not be allowed to break a legal move.
+ */
+function playSoundForMove(flags: string, positionAfter: Chess) {
+  try {
+    if (!useUIStore.getState().soundEnabled) return;
+    playMoveSound(
+      classifyMoveSound({
+        flags,
+        isCheck: positionAfter.inCheck(),
+        isGameOver: positionAfter.isGameOver(),
+      }),
+    );
+  } catch { /* audio must never break the board */ }
+}
+
+function resetTransientStateForNewGame() {  try { useEngineStore.getState().resetAnalysisState(); } catch { /* noop */ }
   try { useUIStore.getState().clearArrows(); } catch { /* noop */ }
   try { useUIStore.getState().clearHighlights(); } catch { /* noop */ }
   try { useReviewStore.getState().clearReview(); } catch { /* noop */ }
@@ -188,6 +208,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         lastUci: child.uci || null,
         ...computeFlags(moveTree, existingChildId),
       });
+      playSoundForMove(result.flags, newChess);
       return true;
     }
 
@@ -235,6 +256,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       lastUci: uci,
       ...computeFlags(newTree, newId),
     });
+    playSoundForMove(result.flags, chessForMove);
     return true;
   },
 

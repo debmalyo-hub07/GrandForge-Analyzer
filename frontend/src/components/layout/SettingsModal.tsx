@@ -6,6 +6,7 @@ import Toggle from '../ui/Toggle';
 import Slider from '../ui/Slider';
 import { useUIStore } from '../../store/uiStore';
 import { useEngineStore } from '../../store/engineStore';
+import { playMoveSound } from '../../services/SoundManager';
 import { BOARD_THEMES, PIECE_SETS } from '../../types/themes';
 import {
   ENGINE_CONFIGS,
@@ -262,6 +263,10 @@ function InterfaceSettings() {
   const setEvaluationGauge = useUIStore((s) => s.setEvaluationGauge);
   const bestMoveArrow = useUIStore((s) => s.bestMoveArrow);
   const setBestMoveArrow = useUIStore((s) => s.setBestMoveArrow);
+  const soundEnabled = useUIStore((s) => s.soundEnabled);
+  const setSoundEnabled = useUIStore((s) => s.setSoundEnabled);
+  const soundVolume = useUIStore((s) => s.soundVolume);
+  const setSoundVolume = useUIStore((s) => s.setSoundVolume);
 
   return (
     <div className="flex flex-col gap-4">
@@ -287,6 +292,33 @@ function InterfaceSettings() {
         checked={bestMoveArrow}
         onChange={setBestMoveArrow}
       />
+
+      <SectionLabel>Sound</SectionLabel>
+      <Toggle
+        label="Move sounds"
+        description="Distinct tones for moves, captures, castling, check and game end"
+        checked={soundEnabled}
+        onChange={(v) => {
+          setSoundEnabled(v);
+          // Play one note on enable so the choice is audible immediately — and
+          // so the first note lands inside this click, satisfying the browser's
+          // autoplay gesture requirement.
+          if (v) playMoveSound('move');
+        }}
+      />
+      {soundEnabled && (
+        <Slider
+          label="Volume"
+          min={0}
+          max={100}
+          value={Math.round(soundVolume * 100)}
+          onChange={(v) => {
+            setSoundVolume(v / 100);
+            playMoveSound('move');
+          }}
+          formatValue={(v) => `${v}%`}
+        />
+      )}
 
       <SectionLabel>Move list</SectionLabel>
       <Toggle
