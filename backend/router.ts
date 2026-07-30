@@ -129,7 +129,17 @@ app.get('/api/health/deep', async (req, res) => {
     // 'render' / 'vercel' / 'local' — which of the two deploy targets answered.
     runtime: process.env.RENDER ? 'render' : process.env.VERCEL ? 'vercel' : 'local',
     db,
-    proxy: { hops: proxyHops, trustProxy: 1, clientIp: req.ip ?? null },
+    proxy: {
+      hops: proxyHops,
+      trustProxy: app.get('trust proxy'),
+      clientIp: req.ip ?? null,
+      // The raw chain, needed to pick the trust-proxy count: `hops` alone says
+      // how many entries there are, not which one is the real client. Express
+      // counts from the RIGHT, so the correct value is the client's distance
+      // from the end. Temporary — drop this once the count is pinned, it
+      // exposes the full proxy chain to anyone who calls the endpoint.
+      xForwardedFor: xffValue || null,
+    },
   });
 });
 
