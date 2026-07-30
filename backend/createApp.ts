@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { buildAllowedOrigins } from './corsOrigins';
+import { trustProxyHops } from './trustProxy';
 
 // Resolved once per process. On Vercel each invocation is a fresh process; on
 // the persistent server this is the boot-time environment — both correct.
@@ -55,16 +56,12 @@ export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;
 
 export function createApp(tier: RateLimitTier = 'default') {
   const app = express();
-  // Behind one proxy hop (Vercel's edge, or Render's load balancer): trust the
-  // first hop so req.ip is the real client IP (correct rate-limit keying +
-  // logging) instead of the proxy address, and so express-rate-limit doesn't
-  // flag an unexpected X-Forwarded-For header.
-  //
-  // If a platform ever fronts us with two hops, every request keys to the same
-  // intermediate IP and one user can exhaust a whole bucket for everybody.
-  // `GET /api/health/deep` reports the observed hop count so this can be
-  // checked against the real deploy instead of assumed (see docs/deploy-render.md).
-  app.set('trust proxy', 1);
+  // Per-platform, measured — NOT a guess. Render fronts this with 3 hops
+  // (client, Cloudflare, internal LB); the old hardcoded 1 resolved req.ip to a
+  // rotating 10.x LB address, so every client shared one rate-limit bucket.
+  // See trustProxy.ts for why too-high is worse than too-low, and
+  // `GET /api/health/deep` to re-measure against any live deploy.
+  app.set('trust proxy', trustProxyHops());
   app.use(
     cors({
       origin: allowedOrigins,

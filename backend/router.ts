@@ -18,6 +18,7 @@
 import express from 'express';
 
 import { connectDB } from './db';
+import { isPublicIp, trustProxyHops } from './trustProxy';
 
 import authLogin from './routes/auth/login';
 import authMe from './routes/auth/me';
@@ -51,7 +52,10 @@ const app = express();
 // The outer app serves /api/health and /api/health/deep itself, so it needs the
 // same proxy trust as the inner route apps (createApp) — `req.ip` is resolved
 // against `req.app`'s settings, and req.app is this app for those two handlers.
-app.set('trust proxy', 1);
+// Must stay in sync with createApp(), hence the shared helper: the deep health
+// check is what this value gets verified with, so if the two ever diverge the
+// diagnostic reports a number no route actually uses.
+app.set('trust proxy', trustProxyHops());
 
 // Security headers on every response. This router only ever serves JSON, never
 // HTML — vercel.json sets an equivalent (richer, document-oriented) set for
@@ -133,12 +137,13 @@ app.get('/api/health/deep', async (req, res) => {
       hops: proxyHops,
       trustProxy: app.get('trust proxy'),
       clientIp: req.ip ?? null,
-      // The raw chain, needed to pick the trust-proxy count: `hops` alone says
-      // how many entries there are, not which one is the real client. Express
-      // counts from the RIGHT, so the correct value is the client's distance
-      // from the end. Temporary — drop this once the count is pinned, it
-      // exposes the full proxy chain to anyone who calls the endpoint.
-      xForwardedFor: xffValue || null,
+      // Whether req.ip looks like a real routable client address rather than a
+      // proxy. This is the assertion that matters: a private/loopback value here
+      // means the hop count is wrong and rate limits are keyed to a proxy. Kept
+      // (unlike the raw-chain echo it replaces) because it leaks nothing — to
+      // re-measure a new platform, read `hops` and add the chain echo back
+      // temporarily. See trustProxy.ts.
+      clientIpLooksPublic: isPublicIp(req.ip),
     },
   });
 });
