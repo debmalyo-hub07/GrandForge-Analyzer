@@ -15,6 +15,15 @@ The repo dual-deploys one API codebase (`backend/router.ts`):
    - `JWT_SECRET`
    - `ADMIN_KEY`
    - `NODE_ENV=production` and `FRONTEND_URL` are pre-filled by the blueprint.
+
+   **Check `FRONTEND_URL` against your real Vercel domain before deploying.** The
+   blueprint ships `https://grand-forge-analyzer.vercel.app`. This value is the
+   CORS allowlist (`backend/corsOrigins.ts`), and Render is a cross-origin host,
+   so a mismatch means every browser request is blocked by CORS — with a clean
+   200 in Render's logs and the failure visible only in the browser console. Copy
+   the domain from the Vercel dashboard verbatim, no trailing slash. Preview
+   deployments need `CORS_EXTRA_ORIGINS` (comma-separated) since each gets its
+   own subdomain.
 3. **Allow Render to reach Atlas**: MongoDB Atlas → Network Access → ensure `0.0.0.0/0` is allowed (already the case if Vercel works, since Vercel egress IPs are dynamic too).
 4. **Deploy** and wait for "Live". Verify:
    - `https://grandforge-api.onrender.com/api/health` → `{"ok":true,"uptime":…}`
@@ -66,8 +75,17 @@ Delete or blank `VITE_API_BASE_URL` in `.env.production` and push — the client
 - **DB pool**: the persistent server uses `maxPoolSize 20` / `socketTimeoutMS 45000` / `maxIdleTimeMS 60000`; serverless is `maxPoolSize 2` / `maxIdleTimeMS 15000` (Atlas M0 caps at 500 connections total and dozens of lambdas can be warm during a review — a bigger per-lambda pool only reserves slots it never uses). Keyed on `process.env.VERCEL` in `backend/db.ts`.
 - **Logs**: Render dashboard → Logs streams the request logger output (method, path, status, ms).
 
-## One-time Atlas index migration (after deploying the 2026-07 correctness fixes)
+## Seed data — already applied
 
+Both seeders have been run against the live Atlas cluster; you do not need to
+repeat them for the deploy.
+
+- `seedOpenings.ts` — 3,733 CC0 ECO openings.
+- `seedOpeningTheory.ts` — 330 own-authored descriptions attached to their
+  openings. Verified idempotent (a second run reports `Updated 0; 330 already
+  current`). Re-run it after any `seedOpenings.ts` reseed.
+
+## One-time Atlas index migration (after deploying the 2026-07 correctness fixes)
 `autoIndex` creates new indexes but never drops old ones. **The PGN-upload fix does not
 take effect until #1 is dropped** (same key, different options → `IndexOptionsConflict`
 blocks the new build). Confirm real names with `db.<coll>.getIndexes()` first; do NOT
