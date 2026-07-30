@@ -53,6 +53,10 @@ interface UIState {
    *  a fast walkthrough does not reset it every session. */
   reviewDwellMs: number;
 
+  /** Piece-glide duration in ms; 0 disables the animation. The OS
+   *  `prefers-reduced-motion` setting overrides this to 0 at read time. */
+  pieceAnimationMs: number;
+
   flipBoard: () => void;
   toggleTheme: () => void;
   setShowCoordinates: (v: boolean) => void;
@@ -83,6 +87,7 @@ interface UIState {
   setSoundEnabled: (v: boolean) => void;
   setSoundVolume: (v: number) => void;
   setReviewDwellMs: (v: number) => void;
+  setPieceAnimationMs: (v: number) => void;
 }
 
 interface PersistedUIState {
@@ -107,6 +112,7 @@ interface PersistedUIState {
   soundEnabled: boolean;
   soundVolume: number;
   reviewDwellMs: number;
+  pieceAnimationMs: number;
 }
 
 export const useUIStore = create<UIState>()(
@@ -142,6 +148,7 @@ export const useUIStore = create<UIState>()(
       soundEnabled: true,
       soundVolume: 0.7,
       reviewDwellMs: 1800,
+      pieceAnimationMs: 200,
 
       flipBoard: () =>
         set({ orientation: get().orientation === 'white' ? 'black' : 'white' }),
@@ -191,10 +198,14 @@ export const useUIStore = create<UIState>()(
       // Clamped so a corrupt persisted value cannot produce a zero-delay timer
       // that advances the review as fast as React can re-render.
       setReviewDwellMs: (v) => set({ reviewDwellMs: Math.max(300, Math.min(6000, v)) }),
+      // 0 means off. The upper bound keeps a glide from outlasting the review
+      // autoplay's fastest dwell (450 ms), which would queue animations behind
+      // each other and drift out of step with the board position.
+      setPieceAnimationMs: (v) => set({ pieceAnimationMs: Math.max(0, Math.min(400, v)) }),
     }),
     {
       name: 'grandforge-ui',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedUIState => ({
         theme: state.theme,
@@ -218,6 +229,7 @@ export const useUIStore = create<UIState>()(
         soundEnabled: state.soundEnabled,
         soundVolume: state.soundVolume,
         reviewDwellMs: state.reviewDwellMs,
+        pieceAnimationMs: state.pieceAnimationMs,
       }),
       migrate: (persisted: any, version: number): PersistedUIState => {
         const p = { ...(persisted ?? {}) };
@@ -242,6 +254,12 @@ export const useUIStore = create<UIState>()(
         // through every ply the instant playback started.
         if (version < 4) {
           Object.assign(p, { reviewDwellMs: 1800 });
+        }
+        // v4→v5 adds the piece-glide duration. 0 is a MEANINGFUL value here
+        // (animation off), so this cannot use `?? 200` at read time — an absent
+        // key has to be filled in with the default right here.
+        if (version < 5) {
+          Object.assign(p, { pieceAnimationMs: 200 });
         }
         return p as PersistedUIState;
       },

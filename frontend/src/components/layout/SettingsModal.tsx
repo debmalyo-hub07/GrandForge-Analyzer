@@ -7,6 +7,7 @@ import Slider from '../ui/Slider';
 import { useUIStore } from '../../store/uiStore';
 import { useEngineStore } from '../../store/engineStore';
 import { playMoveSound } from '../../services/SoundManager';
+import { usePieceAnimation } from '../../hooks/usePieceAnimation';
 import { BOARD_THEMES, PIECE_SETS } from '../../types/themes';
 import {
   ENGINE_CONFIGS,
@@ -33,6 +34,25 @@ const MULTIPV_OPTIONS: (1 | 2 | 3 | 4 | 5)[] = [1, 2, 3, 4, 5];
 const HASH_OPTIONS = [16, 32, 64, 128, 256, 512];
 const MAX_THREADS =
   typeof navigator !== 'undefined' ? Math.max(1, navigator.hardwareConcurrency ?? 1) : 1;
+
+// Piece-glide options. The top end stays under the review autoplay's fastest
+// dwell (450 ms) so a glide can never outlast the step that triggered it.
+const ANIMATION_STEPS: { ms: number; label: string }[] = [
+  { ms: 0, label: 'Off' },
+  { ms: 120, label: 'Fast' },
+  { ms: 200, label: 'Normal' },
+  { ms: 320, label: 'Slow' },
+];
+
+/** Snap a stored duration onto the nearest offered step so the control always
+ *  shows one option as active, even for a value written by an older build. */
+function nearestAnimationStep(ms: number): number {
+  let best = ANIMATION_STEPS[0].ms;
+  for (const step of ANIMATION_STEPS) {
+    if (Math.abs(step.ms - ms) < Math.abs(best - ms)) best = step.ms;
+  }
+  return best;
+}
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -368,6 +388,13 @@ function BoardSettings() {
   const setPinnedPieces = useUIStore((s) => s.setPinnedPieces);
   const checkableKing = useUIStore((s) => s.checkableKing);
   const setCheckableKing = useUIStore((s) => s.setCheckableKing);
+  const pieceAnimationMs = useUIStore((s) => s.pieceAnimationMs);
+  const setPieceAnimationMs = useUIStore((s) => s.setPieceAnimationMs);
+  // Read the OS flag so the copy below can explain why the control looks inert.
+  // usePieceAnimation returns 0 under reduced motion; comparing against the
+  // stored value tells us the override is active rather than the user's choice.
+  const effectiveAnimationMs = usePieceAnimation();
+  const reduceMotion = effectiveAnimationMs === 0 && pieceAnimationMs > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -432,6 +459,20 @@ function BoardSettings() {
         columns={2}
       />
       <Toggle label="Coordinates" checked={showCoordinates} onChange={setShowCoordinates} />
+      <ChoiceRow
+        label="Piece animation"
+        value={nearestAnimationStep(pieceAnimationMs)}
+        options={ANIMATION_STEPS.map((s) => s.ms)}
+        onChange={setPieceAnimationMs}
+        format={(v) => ANIMATION_STEPS.find((s) => s.ms === v)?.label ?? String(v)}
+        columns={4}
+      />
+      {reduceMotion && (
+        <p className="-mt-2 text-[10px] leading-tight text-[var(--text-muted)]">
+          Your system asks for reduced motion, so animation stays off regardless of this
+          setting. Turn that off in your OS accessibility settings to use it.
+        </p>
+      )}
       <Toggle
         label="Legal-move dots"
         description="Mark where a selected piece can go"

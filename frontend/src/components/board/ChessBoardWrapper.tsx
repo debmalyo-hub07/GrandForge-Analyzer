@@ -8,6 +8,7 @@ import { BOARD_THEMES, PIECE_SETS } from '../../types/themes';
 import { buildSquareStyles, buildCustomPieces, REVIEW_COLORS, REVIEW_GLYPHS, readableTextColor } from '../../utils/boardUtils';
 import { computeMotifs } from '../../utils/motifs';
 import { useEngineArrows, useReviewArrows, useManualArrows } from '../../hooks/useArrowLayers';
+import { usePieceAnimation } from '../../hooks/usePieceAnimation';
 import { BoardMarkerOverlay } from './BoardMarkerOverlay';
 import { BoardArrowOverlay } from './BoardArrowOverlay';
 
@@ -49,6 +50,7 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
   const engineArrows = useEngineArrows();
   const reviewArrows = useReviewArrows();
   const manualArrows = useManualArrows();
+  const animationDuration = usePieceAnimation();
 
   const theme = BOARD_THEMES.find((t) => t.id === boardTheme) ?? BOARD_THEMES[0];
   const pieces = PIECE_SETS.find((p) => p.id === pieceSet) ?? PIECE_SETS[0];
@@ -341,7 +343,7 @@ export function ChessBoardWrapper({ boardSize }: ChessBoardWrapperProps) {
         useUIStore.getState().toggleHighlight(sq as Square)
       }
       showBoardNotation={showCoordinates}
-      animationDuration={200}
+      animationDuration={animationDuration}
       promotionDialogVariant="modal"
       />
       {/* `showLegalMoves` only hides the dots/rings — the selection ring stays so
